@@ -38,6 +38,16 @@ if [[ -f "$mc" ]]; then
   grep -q 'IMX_DEFAULT_BSP' "$mc" && fail "MACHINE 不要覆盖 IMX_DEFAULT_BSP（由 kas 锁定）"
 fi
 
+need "meta-alientek/recipes-core/images/alientek-image-base.bb"
+img="$root/meta-alientek/recipes-core/images/alientek-image-base.bb"
+if [[ -f "$img" ]]; then
+  grep -q "core-image-base" "$img" || fail "镜像未继承 core-image-base"
+  grep -q "openssh" "$img" || fail "镜像缺少 openssh"
+  grep -q "ethtool" "$img" || fail "镜像缺少 ethtool"
+  grep -q "iproute2" "$img" || fail "镜像缺少 iproute2"
+  grep -q "iputils" "$img" || fail "镜像缺少 iputils"
+fi
+
 # 后续任务会启用完整清单；设置 FULL=1 才检查全部
 if [[ "${FULL:-0}" == "1" ]]; then
   need "meta-alientek/conf/machine/imx6ull-alientek-alpha.conf"
