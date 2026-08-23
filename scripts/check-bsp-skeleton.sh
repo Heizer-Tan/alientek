@@ -98,13 +98,18 @@ if [[ -f "$defp" ]]; then
   grep -q "imx6ull-alientek-alpha" "$defp" || fail "defconfig 未指向阿尔法设备树"
 fi
 
-# 后续任务会启用完整清单；设置 FULL=1 才检查全部
-if [[ "${FULL:-0}" == "1" ]]; then
+# 完整清单默认开启；设置 FULL=0 可跳过
+if [[ "${FULL:-1}" == "1" ]]; then
   need "meta-alientek/conf/machine/imx6ull-alientek-alpha.conf"
   need "meta-alientek/recipes-core/images/alientek-image-base.bb"
   need "meta-alientek/recipes-kernel/linux/linux-fslc_%.bbappend"
   need "meta-alientek/recipes-bsp/u-boot/u-boot-fslc_%.bbappend"
   need "scripts/build.sh"
+  need "scripts/export-nfs-tftp.sh"
+  grep -q "kas-container" "$root/scripts/build.sh" || fail "build.sh 未使用 kas-container"
+  grep -q "scarthgap" "$root/README.md" || fail "README 未写 wrynose 失败时的 scarthgap 回退"
+  grep -q "netboot" "$root/README.md" || fail "README 未写 netboot"
+  grep -q "/srv/nfs/alientek" "$root/README.md" || fail "README 未写 NFS 导出路径"
 fi
 
 [[ "$err" -eq 0 ]] || exit 1
