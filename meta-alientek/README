@@ -1,0 +1,1 @@
+正点原子 i.MX6ULL 阿尔法板级层。只放 MACHINE、补丁、dts、镜像，不改 poky/meta-freescale。

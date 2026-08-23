@@ -1,0 +1,31 @@
+header:
+  version: 14
+
+machine: imx6ull-alientek-alpha
+distro: poky
+target:
+  - alientek-image-base
+
+repos:
+  poky:
+    url: https://git.yoctoproject.org/git/poky
+    branch: wrynose
+    layers:
+      meta:
+      meta-poky:
+  meta-openembedded:
+    url: https://git.openembedded.org/meta-openembedded
+    branch: wrynose
+    layers:
+      meta-oe:
+  meta-freescale:
+    url: https://git.yoctoproject.org/git/meta-freescale
+    branch: wrynose
+  meta-alientek:
+    path: ../meta-alientek
+
+local_conf_header:
+  mainline-bsp: |
+    IMX_DEFAULT_BSP = "mainline"
+    PACKAGE_CLASSES = "package_rpm"
+    EXTRA_IMAGE_FEATURES += "debug-tweaks ssh-server-openssh"

@@ -1,0 +1,8 @@
+/build/
+/build-*/
+/downloads/
+/sstate-cache/
+/layers/
+/.kas*
+*.pyc
+__pycache__/
