@@ -1,0 +1,15 @@
+From: Alientek BSP <bsp@local>
+Subject: [PATCH] ARM: dts: imx: add imx6ull-alientek-alpha to Makefile
+
+---
+ arch/arm/boot/dts/nxp/imx/Makefile | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/boot/dts/nxp/imx/Makefile b/arch/arm/boot/dts/nxp/imx/Makefile
+index 1111111..2222222 100644
+--- a/arch/arm/boot/dts/nxp/imx/Makefile
++++ b/arch/arm/boot/dts/nxp/imx/Makefile
+@@ -200,6 +200,7 @@ dtb-$(CONFIG_SOC_IMX6UL) += \
+ 	imx6ull-14x14-evk.dtb \
++	imx6ull-alientek-alpha.dtb \
+ 	imx6ull-colibri-emmc-eval-v3.dtb \

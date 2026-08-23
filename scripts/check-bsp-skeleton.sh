@@ -48,6 +48,33 @@ if [[ -f "$img" ]]; then
   grep -q "iputils" "$img" || fail "镜像缺少 iputils"
 fi
 
+need "meta-alientek/recipes-kernel/linux/linux-fslc_%.bbappend"
+need "meta-alientek/recipes-kernel/linux/linux-fslc/nfs.cfg"
+need "meta-alientek/recipes-kernel/linux/linux-fslc/imx6ull-alientek-alpha.dts"
+need "meta-alientek/recipes-kernel/linux/linux-fslc/0001-arm-dts-imx-add-imx6ull-alientek-alpha-to-Makefile.patch"
+
+append="$root/meta-alientek/recipes-kernel/linux/linux-fslc_%.bbappend"
+dts="$root/meta-alientek/recipes-kernel/linux/linux-fslc/imx6ull-alientek-alpha.dts"
+cfg="$root/meta-alientek/recipes-kernel/linux/linux-fslc/nfs.cfg"
+mk="$root/meta-alientek/recipes-kernel/linux/linux-fslc/0001-arm-dts-imx-add-imx6ull-alientek-alpha-to-Makefile.patch"
+
+if [[ -f "$append" ]]; then
+  grep -q "nfs.cfg" "$append" || fail "bbappend 未引用 nfs.cfg"
+  grep -q "imx6ull-alientek-alpha.dts" "$append" || fail "bbappend 未引用 dts"
+fi
+if [[ -f "$dts" ]]; then
+  grep -q "imx6ull-14x14-evk.dts" "$dts" || fail "dts 应以 EVK 为基线 include"
+  grep -q "0x20000000" "$dts" || fail "dts 内存不是 512MB"
+  grep -qi "lan8720\\|smsc" "$dts" || fail "dts 未描述 LAN8720"
+fi
+if [[ -f "$cfg" ]]; then
+  grep -q "CONFIG_ROOT_NFS=y" "$cfg" || fail "nfs.cfg 缺少 CONFIG_ROOT_NFS"
+  grep -q "CONFIG_IP_PNP_DHCP=y" "$cfg" || fail "nfs.cfg 缺少 CONFIG_IP_PNP_DHCP"
+fi
+if [[ -f "$mk" ]]; then
+  grep -q "imx6ull-alientek-alpha.dtb" "$mk" || fail "Makefile 补丁未加入 dtb"
+fi
+
 # 后续任务会启用完整清单；设置 FULL=1 才检查全部
 if [[ "${FULL:-0}" == "1" ]]; then
   need "meta-alientek/conf/machine/imx6ull-alientek-alpha.conf"
