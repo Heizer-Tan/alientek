@@ -75,6 +75,29 @@ if [[ -f "$mk" ]]; then
   grep -q "imx6ull-alientek-alpha.dtb" "$mk" || fail "Makefile 补丁未加入 dtb"
 fi
 
+need "meta-alientek/recipes-bsp/u-boot/u-boot-fslc_%.bbappend"
+need "meta-alientek/recipes-bsp/u-boot/u-boot-fslc/boot.cmd"
+need "meta-alientek/recipes-bsp/u-boot/u-boot-fslc/0001-configs-add-mx6ull_alientek_alpha_defconfig.patch"
+
+ub="$root/meta-alientek/recipes-bsp/u-boot/u-boot-fslc_%.bbappend"
+cmd="$root/meta-alientek/recipes-bsp/u-boot/u-boot-fslc/boot.cmd"
+defp="$root/meta-alientek/recipes-bsp/u-boot/u-boot-fslc/0001-configs-add-mx6ull_alientek_alpha_defconfig.patch"
+
+if [[ -f "$ub" ]]; then
+  grep -q "boot.cmd" "$ub" || fail "u-boot bbappend 未引用 boot.cmd"
+fi
+if [[ -f "$cmd" ]]; then
+  grep -q "nfsroot" "$cmd" || fail "boot.cmd 缺少 nfsroot"
+  grep -q "ttymxc0" "$cmd" || fail "boot.cmd 控制台不是 ttymxc0"
+  grep -q "mmcboot" "$cmd" || fail "boot.cmd 缺少 mmcboot"
+  grep -q "netboot" "$cmd" || fail "boot.cmd 缺少 netboot"
+  grep -q "imx6ull-alientek-alpha.dtb" "$cmd" || fail "boot.cmd 未加载阿尔法 dtb"
+fi
+if [[ -f "$defp" ]]; then
+  grep -q "mx6ull_alientek_alpha_defconfig" "$defp" || fail "补丁未加入阿尔法 defconfig"
+  grep -q "imx6ull-alientek-alpha" "$defp" || fail "defconfig 未指向阿尔法设备树"
+fi
+
 # 后续任务会启用完整清单；设置 FULL=1 才检查全部
 if [[ "${FULL:-0}" == "1" ]]; then
   need "meta-alientek/conf/machine/imx6ull-alientek-alpha.conf"

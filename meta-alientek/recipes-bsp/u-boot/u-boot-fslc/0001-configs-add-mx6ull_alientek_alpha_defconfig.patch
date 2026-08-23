@@ -1,0 +1,99 @@
+From: Alientek BSP <bsp@local>
+Subject: [PATCH] configs: add mx6ull_alientek_alpha_defconfig
+
+Add Alientek i.MX6ULL Alpha defconfig, device tree, and Makefile entry.
+Derived from mx6ull_14x14_evk_defconfig with alpha DTB and network boot cmds.
+
+---
+ arch/arm/dts/Makefile                          |  1 +
+ arch/arm/dts/imx6ull-alientek-alpha.dts        | 52 ++++++++++++++++++++
+ configs/mx6ull_alientek_alpha_defconfig        | 15 ++++++
+ 3 files changed, 68 insertions(+)
+ create mode 100644 arch/arm/dts/imx6ull-alientek-alpha.dts
+ create mode 100644 configs/mx6ull_alientek_alpha_defconfig
+
+diff --git a/arch/arm/dts/Makefile b/arch/arm/dts/Makefile
+index 1111111..2222222 100644
+--- a/arch/arm/dts/Makefile
++++ b/arch/arm/dts/Makefile
+@@ -800,6 +800,7 @@ dtb-$(CONFIG_MX6ULL) += \
+ 	imx6ull-14x14-evk.dtb \
++	imx6ull-alientek-alpha.dtb \
+ 	imx6ull-colibri-emmc-eval-v3.dtb \
+ 
+diff --git a/arch/arm/dts/imx6ull-alientek-alpha.dts b/arch/arm/dts/imx6ull-alientek-alpha.dts
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/arch/arm/dts/imx6ull-alientek-alpha.dts
+@@ -0,0 +1,52 @@
++// SPDX-License-Identifier: GPL-2.0+
++/dts-v1/;
++
++#include "imx6ull-14x14-evk.dts"
++
++/ {
++	model = "Alientek i.MX6ULL Alpha";
++	compatible = "alientek,imx6ull-alpha", "fsl,imx6ull";
++
++	memory@80000000 {
++		device_type = "memory";
++		reg = <0x80000000 0x20000000>;
++	};
++};
++
++&fec1 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_enet1>;
++	phy-mode = "rmii";
++	phy-handle = <&ethphy0>;
++	phy-reset-gpios = <&gpio5 7 GPIO_ACTIVE_LOW>;
++	phy-reset-duration = <200>;
++	status = "okay";
++};
++
++&fec2 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_enet2>;
++	phy-mode = "rmii";
++	phy-handle = <&ethphy1>;
++	phy-reset-gpios = <&gpio5 8 GPIO_ACTIVE_LOW>;
++	phy-reset-duration = <200>;
++	status = "okay";
++};
++
++&mdio {
++	ethphy0: ethernet-phy@0 {
++		compatible = "ethernet-phy-id0007.e410", "ethernet-phy-ieee802.3-c22";
++		reg = <0>;
++		smsc,disable-energy-detect;
++	};
++
++	ethphy1: ethernet-phy@1 {
++		compatible = "ethernet-phy-id0007.e410", "ethernet-phy-ieee802.3-c22";
++		reg = <1>;
++		smsc,disable-energy-detect;
++	};
++};
++
+diff --git a/configs/mx6ull_alientek_alpha_defconfig b/configs/mx6ull_alientek_alpha_defconfig
+new file mode 100644
+index 0000000..4444444
+--- /dev/null
++++ b/configs/mx6ull_alientek_alpha_defconfig
+@@ -0,0 +1,15 @@
++CONFIG_ARM=y
++CONFIG_ARCH_MX6=y
++CONFIG_SYS_MALLOC_LEN=0x1000000
++CONFIG_NR_DRAM_BANKS=1
++CONFIG_TARGET_MX6ULL_14X14_EVK=y
++CONFIG_DEFAULT_DEVICE_TREE="imx6ull-alientek-alpha"
++CONFIG_CMD_DHCP=y
++CONFIG_CMD_TFTPBOOT=y
++CONFIG_CMD_NFS=y
++CONFIG_CMD_PING=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_FAT=y
++CONFIG_CMD_EXT4=y
++CONFIG_CMD_BOOTZ=y
++CONFIG_OF_CONTROL=y
