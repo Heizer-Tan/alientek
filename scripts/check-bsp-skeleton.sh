@@ -27,6 +27,17 @@ if [[ -f "$root/meta-alientek/conf/layer.conf" ]]; then
     || fail "layer.conf 未声明 wrynose"
 fi
 
+need "meta-alientek/conf/machine/imx6ull-alientek-alpha.conf"
+mc="$root/meta-alientek/conf/machine/imx6ull-alientek-alpha.conf"
+if [[ -f "$mc" ]]; then
+  grep -q 'MACHINEOVERRIDES =. "mx6ull:"' "$mc" || fail "MACHINE 未声明 mx6ull"
+  grep -q "imx-base.inc" "$mc" || fail "MACHINE 未 include imx-base.inc"
+  grep -q "imx6ull-alientek-alpha.dtb" "$mc" || fail "MACHINE 未设置阿尔法 dtb"
+  grep -q "mx6ull_alientek_alpha_config" "$mc" || fail "MACHINE 未设置阿尔法 U-Boot config"
+  grep -q "115200;ttymxc0" "$mc" || fail "MACHINE 串口不是 ttymxc0 115200"
+  grep -q 'IMX_DEFAULT_BSP' "$mc" && fail "MACHINE 不要覆盖 IMX_DEFAULT_BSP（由 kas 锁定）"
+fi
+
 # 后续任务会启用完整清单；设置 FULL=1 才检查全部
 if [[ "${FULL:-0}" == "1" ]]; then
   need "meta-alientek/conf/machine/imx6ull-alientek-alpha.conf"
