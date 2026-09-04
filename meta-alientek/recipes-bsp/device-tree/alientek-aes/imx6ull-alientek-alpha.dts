@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+//
+// Copyright (C) 2016 Freescale Semiconductor, Inc.
+
+/dts-v1/;
+
+#include "imx6ull.dtsi"
+#include "imx6ull-alientek-alpha.dtsi"
+
+/ {
+	model = "Awesome Embedded Studio IMX6ULL (i.mx NXP)";
+	compatible = "fsl,imx6ull-14x14-evk", "fsl,imx6ull";
+};
+
+&clks {
+	assigned-clocks = <&clks IMX6UL_CLK_PLL3_PFD2>,
+			  <&clks IMX6UL_CLK_PLL4_AUDIO_DIV>;
+	assigned-clock-rates = <320000000>, <786432000>;
+};
+
+&csi {
+	status = "okay";
+};
+
+&ov5640 {
+	status = "okay";
+};
+
+/*
+	usdhc2 is assigned from arch/arm/dts/imx6ull-14x14-evk-emmc.dts
+	which we simplified the include hieracy
+*/
+&usdhc2 {
+	pinctrl-names = "default", "state_100mhz", "state_200mhz";
+	pinctrl-0 = <&pinctrl_usdhc2_8bit>;
+	pinctrl-1 = <&pinctrl_usdhc2_8bit_100mhz>;
+	pinctrl-2 = <&pinctrl_usdhc2_8bit_200mhz>;
+	bus-width = <8>;
+	non-removable;
+	status = "okay";
+};

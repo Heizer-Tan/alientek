@@ -1,4 +1,5 @@
 setenv fdtfile imx6ull-alientek-alpha.dtb
+setenv fdt_file imx6ull-alientek-alpha.dtb
 setenv console ttymxc0,115200
 setenv mmcdev 1
 setenv mmcpart 1
@@ -11,3 +12,4 @@ setenv netargs "setenv bootargs console=${console} root=/dev/nfs nfsroot=${serve
 setenv netboot "echo Booting from NFS...; dhcp; run netargs; tftp ${loadaddr} zImage; tftp ${fdt_addr_r} ${fdtfile}; bootz ${loadaddr} - ${fdt_addr_r}"
 
 setenv bootcmd "run mmcboot"
+run mmcboot

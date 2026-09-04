@@ -4,5 +4,9 @@
 /sstate-cache/
 /layers/
 /.kas*
+# kas 按 kas/alientek-alpha.yml 检出的上游层（非板级资产）
+/poky/
+/meta-freescale/
+/meta-openembedded/
 *.pyc
 __pycache__/

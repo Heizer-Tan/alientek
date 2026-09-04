@@ -9,23 +9,46 @@ target:
 repos:
   poky:
     url: https://git.yoctoproject.org/git/poky
-    branch: wrynose
+    branch: scarthgap
     layers:
       meta:
       meta-poky:
   meta-openembedded:
     url: https://git.openembedded.org/meta-openembedded
-    branch: wrynose
+    branch: scarthgap
     layers:
       meta-oe:
   meta-freescale:
     url: https://git.yoctoproject.org/git/meta-freescale
-    branch: wrynose
+    branch: scarthgap
   meta-alientek:
-    path: ../meta-alientek
+    path: meta-alientek
 
 local_conf_header:
   mainline-bsp: |
     IMX_DEFAULT_BSP = "mainline"
     PACKAGE_CLASSES = "package_rpm"
     EXTRA_IMAGE_FEATURES += "debug-tweaks ssh-server-openssh"
+  slim-no-nxp-wifi: |
+    # poky 默认 DISTRO_FEATURES 含 wifi；再叠加 usbhost 时，
+    # packagegroup-base-extended 会强行加入 Wi-Fi 栈，进而拉取
+    # firmware-nxp-wifi（github.com/nxp-imx/imx-firmware）。阿尔法第一期无 NXP Wi-Fi。
+    DISTRO_FEATURES:remove = "wifi bluetooth 3g nfc"
+    BBMASK += "meta-freescale/recipes-bsp/firmware-imx/firmware-nxp-wifi"
+  skip-spdx: |
+    # poky 默认 INHERIT create-spdx。kas-container 里并行写
+    # tmp/deploy/spdx 时会出现 0 字节 json，do_create_runtime_spdx
+    # 解析失败（JSONDecodeError: Expecting value）。第一期只要镜像，不产 SBOM。
+    INHERIT:remove = "create-spdx"
+  providers: |
+    PREFERRED_PROVIDER_virtual/bootloader = "u-boot"
+    PREFERRED_PROVIDER_virtual/kernel = "linux"
+    PREFERRED_VERSION_u-boot = "2025.04%"
+    PREFERRED_VERSION_u-boot-tools = "2025.04%"
+  fetch-mirrors: |
+    # 清华 /kernel/v7.x 对应官方 /pub/linux/kernel/v7.x
+    # 勿把 KERNELORG_MIRROR 直接改成 tuna（会多拼 /linux/kernel/）
+    MIRRORS += " \
+    ${KERNELORG_MIRROR}/linux/kernel/ https://mirrors.tuna.tsinghua.edu.cn/kernel/ \
+    https://cdn.kernel.org/pub/linux/kernel/ https://mirrors.tuna.tsinghua.edu.cn/kernel/ \
+    "

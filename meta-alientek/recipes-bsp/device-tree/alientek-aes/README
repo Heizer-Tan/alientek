@@ -1,0 +1,1 @@
+U-Boot 与 Linux 共用本目录板级设备树（imx6ull-alientek-alpha.dts{,i}）；勿覆盖主线 imx6ull.dtsi。
