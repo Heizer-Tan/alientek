@@ -8,7 +8,7 @@
 
 阿尔法板设备树已用主线 `gpio-keys` 将 KEY0（GPIO1_IO18）上报为 `KEY_ENTER`，板上可用 `/dev/input/event*` 验证。镜像中尚无用户态按键演示程序。
 
-**目标**：提供一个 C 程序 `key-monitor`，读取并打印按键按下/松开；支持前台手动运行，以及可选 SysV 自启（默认关闭）。
+**目标**：提供一个 C 程序 `key-monitor`，读取 `EV_KEY` 事件并打印 `type`、`code`、`value` 三个字段；支持前台手动运行，以及可选 SysV 自启（默认关闭）。
 
 **非目标**：LED 联动、外部脚本钩子、libevdev、自写内核按键驱动、systemd。
 
@@ -38,16 +38,21 @@ key-monitor --syslog        # 写 syslog，服务模式使用
 
 **设备发现**：扫描 `/dev/input/event*`，`EVIOCGNAME` 名称含子串则选用；`-d` 优先于自动扫描。
 
-**输出（一行一事）**：
+**输出（一行一事）**：打印 `struct input_event` 的三个字段（十进制），格式固定为：
 
 ```text
-KEY_ENTER pressed
-KEY_ENTER released
+type=<type> code=<code> value=<value>
 ```
 
-未知键码：`KEY_<code> pressed|released`（`<code>` 为十进制 `ev.code`）。  
-仅处理 `type == EV_KEY`；忽略同步与其它事件。  
-键名映射表至少包含 `KEY_ENTER`（与当前 DT 一致）。
+示例（KEY0 → `KEY_ENTER=28`，按下 `value=1`、松开 `value=0`）：
+
+```text
+type=1 code=28 value=1
+type=1 code=28 value=0
+```
+
+仅处理 `type == EV_KEY`（`type=1`）；忽略同步与其它事件。  
+不强制打印键名字符串；需要时可用 `code` 对照 `linux/input-event-codes.h`（`KEY_ENTER=28`）。
 
 **信号处理**：`SIGINT` / `SIGTERM` 关闭 fd 后以退出码 `0` 退出。
 
@@ -96,7 +101,7 @@ Recipe 要点：
 ## 6. 验收标准
 
 1. rootfs 存在 `/usr/bin/key-monitor`
-2. 串口执行 `key-monitor`，按 KEY0 出现 `KEY_ENTER pressed` / `released`
+2. 串口执行 `key-monitor`，按 KEY0 出现 `type=1 code=28 value=1` 与 `type=1 code=28 value=0`
 3. `key-monitor --syslog` 时系统日志可见同等内容
 4. 未手动 `update-rc.d` 时开机不自动运行
 5. 本机构建可 `bitbake key-monitor` 通过（不必强制整镜像 CI）
