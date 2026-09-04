@@ -2,12 +2,16 @@
 # 把 deploy 里的 zImage、dtb、rootfs tar 拷到 TFTP 与 NFS 导出目录
 set -euo pipefail
 
-deploy=""
-tftp_dir="/tftpboot"
-nfs_dir="/srv/nfs/alientek"
+root="$(cd "$(dirname "$0")/.." && pwd)"
+deploy="${root}/build/tmp/deploy/images/imx6ull-alientek-alpha"
+tftp_dir="/srv/tftp"
+nfs_dir="/srv/nfs/nfs_rootfs"
 
 usage() {
-  echo "用法: $0 --deploy-dir DIR [--tftp-dir DIR] [--nfs-dir DIR]" >&2
+  echo "用法: $0 [--deploy-dir DIR] [--tftp-dir DIR] [--nfs-dir DIR]" >&2
+  echo "  默认 deploy: ${root}/build/tmp/deploy/images/imx6ull-alientek-alpha" >&2
+  echo "  默认 tftp:   /srv/tftp" >&2
+  echo "  默认 nfs:    /srv/nfs/nfs_rootfs" >&2
   exit 2
 }
 
@@ -21,16 +25,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$deploy" ]] || { echo "ERROR: 必须指定 --deploy-dir" >&2; exit 1; }
 [[ -d "$deploy" ]] || { echo "ERROR: deploy 目录不存在: $deploy" >&2; exit 1; }
 
 zimage="$(find "$deploy" -maxdepth 1 -name 'zImage' -print -quit)"
 dtb="$(find "$deploy" -maxdepth 1 -name 'imx6ull-alientek-alpha.dtb' -print -quit)"
-rootfs="$(find "$deploy" -maxdepth 1 -name 'alientek-image-base-imx6ull-alientek-alpha.rootfs.tar.zst' -o -name 'alientek-image-base-imx6ull-alientek-alpha.rootfs.tar.bz2' -o -name 'alientek-image-base-imx6ull-alientek-alpha.rootfs.tar.gz' | head -n 1)"
+# 兼容无时间戳 symlink 与带时间戳的真实文件
+rootfs="$(find "$deploy" -maxdepth 1 \( \
+  -name 'alientek-image-base-imx6ull-alientek-alpha.rootfs.tar.zst' -o \
+  -name 'alientek-image-base-imx6ull-alientek-alpha.rootfs.tar.bz2' -o \
+  -name 'alientek-image-base-imx6ull-alientek-alpha.rootfs.tar.gz' -o \
+  -name 'alientek-image-base-imx6ull-alientek-alpha.rootfs-*.tar.zst' -o \
+  -name 'alientek-image-base-imx6ull-alientek-alpha.rootfs-*.tar.bz2' -o \
+  -name 'alientek-image-base-imx6ull-alientek-alpha.rootfs-*.tar.gz' \
+  \) -print | head -n 1)"
 
 [[ -n "$zimage" ]] || { echo "ERROR: 未找到 zImage（是否已编译成功？）" >&2; exit 1; }
 [[ -n "$dtb" ]] || { echo "ERROR: 未找到 imx6ull-alientek-alpha.dtb" >&2; exit 1; }
-[[ -n "$rootfs" ]] || { echo "ERROR: 未找到 rootfs tar" >&2; exit 1; }
+if [[ -z "$rootfs" ]]; then
+  echo "ERROR: 未找到 rootfs tar（需要 *.rootfs.tar.zst/.gz/.bz2）" >&2
+  echo "       当前 deploy 若只有 .wic.gz，说明未开 IMAGE_FSTYPES 的 tar。" >&2
+  echo "       机器配置已含 tar.zst 时请重新: ./scripts/build.sh" >&2
+  exit 1
+fi
 
 mkdir -p "$tftp_dir" "$nfs_dir"
 cp -f "$zimage" "$tftp_dir/zImage"

@@ -45,6 +45,11 @@ local_conf_header:
     PREFERRED_PROVIDER_virtual/kernel = "linux"
     PREFERRED_VERSION_u-boot = "2025.04%"
     PREFERRED_VERSION_u-boot-tools = "2025.04%"
+  build-cache: |
+    # downloads 在仓库根（与 build/ 分离）；sstate 仍用 build/sstate-cache
+    # （首次改 DL_DIR 时勿丢弃已有 build/downloads，应迁到 ../downloads）
+    DL_DIR ?= "${TOPDIR}/../downloads"
+    SSTATE_DIR ?= "${TOPDIR}/sstate-cache"
   fetch-mirrors: |
     # 清华 /kernel/v7.x 对应官方 /pub/linux/kernel/v7.x
     # 勿把 KERNELORG_MIRROR 直接改成 tuna（会多拼 /linux/kernel/）

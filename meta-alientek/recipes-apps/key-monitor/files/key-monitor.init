@@ -1,0 +1,62 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          key-monitor
+# Required-Start:    $local_fs
+# Required-Stop:     $local_fs
+# Default-Start:
+# Default-Stop:
+# Short-Description: Monitor gpio-keys EV_KEY events to syslog
+### END INIT INFO
+
+# key-monitor SysV 脚本：默认不加入运行级别（需手动 update-rc.d）
+
+NAME=key-monitor
+DAEMON=/usr/bin/key-monitor
+PIDFILE=/var/run/key-monitor.pid
+DAEMON_ARGS="--syslog"
+
+[ -x "$DAEMON" ] || exit 0
+
+do_start() {
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "$NAME already running"
+		return 0
+	fi
+	start-stop-daemon --start --quiet --background \
+		--make-pidfile --pidfile "$PIDFILE" \
+		--exec "$DAEMON" -- $DAEMON_ARGS
+	echo "Started $NAME"
+}
+
+do_stop() {
+	start-stop-daemon --stop --quiet --pidfile "$PIDFILE" --retry 5
+	rm -f "$PIDFILE"
+	echo "Stopped $NAME"
+}
+
+case "$1" in
+start)
+	do_start
+	;;
+stop)
+	do_stop
+	;;
+restart)
+	do_stop
+	do_start
+	;;
+status)
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "$NAME is running"
+		exit 0
+	fi
+	echo "$NAME is not running"
+	exit 3
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart|status}"
+	exit 1
+	;;
+esac
+
+exit 0

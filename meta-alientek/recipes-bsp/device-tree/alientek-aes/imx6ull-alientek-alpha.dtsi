@@ -195,6 +195,7 @@
 
 	gpio-keys {
 		compatible = "gpio-keys";
+		autorepeat;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_key>;
 		user-key {

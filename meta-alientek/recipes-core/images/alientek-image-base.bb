@@ -9,4 +9,5 @@ CORE_IMAGE_EXTRA_INSTALL += " \
     ethtool \
     iproute2 \
     iputils \
+    key-monitor \
 "

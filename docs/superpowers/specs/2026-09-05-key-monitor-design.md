@@ -20,8 +20,8 @@ gpio-keys (DT) → /dev/input/eventN → key-monitor → stdout 或 syslog
 
 | 组件 | 路径 | 职责 |
 |------|------|------|
-| 源码 | `meta-alientek/recipes-apps/key-monitor/files/key-monitor.c` | 设备发现、事件循环、输出 |
-| 构建 | `files/Makefile` + `key-monitor_1.0.bb` | 交叉编译并安装 |
+| 源码 | `meta-alientek/recipes-apps/key-monitor/files/src/key-monitor.c` | 设备发现、事件循环、输出 |
+| 构建 | `files/src/Makefile` + `key-monitor_1.0.bb` | 交叉编译并安装 |
 | 可选服务 | `files/key-monitor.init` | SysV 脚本，启动 `key-monitor --syslog` |
 | 镜像 | `alientek-image-base.bb` | `CORE_IMAGE_EXTRA_INSTALL` 加入 `key-monitor` |
 
@@ -84,9 +84,10 @@ update-rc.d key-monitor defaults
 meta-alientek/recipes-apps/key-monitor/
   key-monitor_1.0.bb
   files/
-    key-monitor.c
-    Makefile
     key-monitor.init
+    src/
+      key-monitor.c
+      Makefile
 ```
 
 Recipe 要点：

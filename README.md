@@ -35,10 +35,20 @@
 # 只检出层并下载源码，不编译（源码进 downloads/）
 ./scripts/build.sh --fetch-only
 
-# 编译镜像
+# 编译完整镜像（未改动的包走 sstate-cache/，源码包走 downloads/）
 ./scripts/build.sh
+
+# 只改了设备树时：自动检测并只编 DTB（不编 linux/u-boot），有 /tftp 会顺带拷过去
+./scripts/build.sh
+# 强制完整构建：./scripts/build.sh --full
+# 指定 TFTP：./scripts/build.sh --tftp /tftp
+
+# 只编某个 recipe（例如改了 key-monitor 后）
+./scripts/build.sh key-monitor
+# 或：./scripts/build.sh --target key-monitor
 ```
 
+`downloads/` 在仓库根（与 `build/` 分离）；`sstate-cache` 在 `build/sstate-cache/`。若曾把 `DL_DIR` 指到空目录导致重下失败，把旧的 `build/downloads` 迁到仓库根 `downloads/` 即可。
 国内访问 `ghcr.io` 常 TLS 超时。`build.sh` 会改拉南大 `ghcr.nju.edu.cn/siemens/kas/kas:5.5`，成功后打成官方标签。
 
 **不要用 `ghcr.1ms.run` 拉 kas:5.5**：该源曾把最大一层（约 232MB）下完但校验失败（`unexpected commit digest`）。若已经踩过，先清坏层再换源：
@@ -82,32 +92,42 @@ sudo bmaptool copy alientek-image-base-imx6ull-alientek-alpha.rootfs.wic.gz /dev
 
 拨码选择 SD 启动，串口 115200。U-Boot 执行 `run mmcboot`。若找不到系统分区，在 U-Boot 里 `mmc list` 后 `setenv mmcdev 0` 再 `run mmcboot`。
 
-## NFS 启动（netboot，第一期必验）
+## 按键演示（key-monitor）
 
-1. 编译完成后导出：
+串口登录后：`key-monitor`（自动找 `gpio-keys`），按 KEY0 会打印 `type=1 code=28 value=1/0`。可选自启：`update-rc.d key-monitor defaults && /etc/init.d/key-monitor start`（写 syslog）。
+
+## NFS 启动（netboot，默认方案）
+
+1. 编译完成后导出（需有 `*.rootfs.tar.zst`；仅有 `wic.gz` 时先完整编一次镜像）：
 
 ```bash
 sudo ./scripts/export-nfs-tftp.sh \
-  --deploy-dir build/tmp/deploy/images/imx6ull-alientek-alpha \
-  --tftp-dir /tftpboot \
-  --nfs-dir /srv/nfs/alientek
+  --tftp-dir /tftp \
+  --nfs-dir /srv/nfs/nfs_rootfs
 ```
+
+（`--deploy-dir` 默认为仓库下 `build/tmp/deploy/images/imx6ull-alientek-alpha`，一般可省略。）
 
 2. `/etc/exports`：
 
 ```
-/srv/nfs/alientek *(rw,sync,no_root_squash,no_subtree_check)
+/srv/nfs/nfs_rootfs *(rw,sync,no_root_squash,no_subtree_check)
 ```
 
 `sudo exportfs -ra`，并启动 tftpd 与 nfs-server。
 
-3. 板端与 PC 同一网段。U-Boot：
+3. 板端与 PC 同一网段。当前 `boot.cmd` 默认 `run netboot`（静态 IP + eth1），示例：
 
 ```
-setenv serverip 192.168.1.10
-setenv nfsroot /srv/nfs/alientek
+setenv serverip 192.168.5.27
+setenv ipaddr 192.168.5.201
+setenv gatewayip 192.168.5.1
+setenv netmask 255.255.255.0
+setenv nfsroot /srv/nfs/nfs_rootfs
 run netboot
 ```
+
+未更新 `boot.scr` 时，可在 U-Boot 里手动执行上面变量后 `run netboot`。TF 卡可只烧 U-Boot；内核/DTB 走 TFTP，根走 NFS。
 
 ## 故障分段
 
