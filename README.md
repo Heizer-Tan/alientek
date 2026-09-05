@@ -96,6 +96,19 @@ sudo bmaptool copy alientek-image-base-imx6ull-alientek-alpha.rootfs.wic.gz /dev
 
 串口登录后：`key-monitor`（自动找 `gpio-keys`），按 KEY0 会打印 `type=1 code=28 value=1/0`。可选自启：`update-rc.d key-monitor defaults && /etc/init.d/key-monitor start`（写 syslog）。
 
+## AP3216C 演示
+
+设备树节点挂在 `i2c1@0x1e`，镜像内包含 `i2c-tools`、`ap3216c-module` 与 `ap3216c-read`。可先用 `i2cdetect` / `i2cget` / `i2cdump` 排查总线，再读取驱动导出的数据：
+
+```bash
+i2cdetect -y 0
+ap3216c-read
+ap3216c-read -w
+# 示例：ir=12 als=345 ps=28
+```
+
+若手靠近传感器，`ps` 应上升；遮光/打光时，`als` 应变化。
+
 ## NFS 启动（netboot，默认方案）
 
 1. 编译完成后导出（需有 `*.rootfs.tar.zst`；仅有 `wic.gz` 时先完整编一次镜像）：
