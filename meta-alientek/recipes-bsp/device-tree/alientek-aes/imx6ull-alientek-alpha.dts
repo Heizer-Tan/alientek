@@ -18,14 +18,6 @@
 	assigned-clock-rates = <320000000>, <786432000>;
 };
 
-&csi {
-	status = "okay";
-};
-
-&ov5640 {
-	status = "okay";
-};
-
 /*
 	usdhc2 is assigned from arch/arm/dts/imx6ull-14x14-evk-emmc.dts
 	which we simplified the include hieracy

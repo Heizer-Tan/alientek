@@ -14,3 +14,13 @@ CORE_IMAGE_EXTRA_INSTALL += " \
     ap3216c-read \
     ap3216c-module \
 "
+
+# NFS root 场景下 eth1 由内核 ip= 参数配置，用户态网络文件仅保留 lo
+
+ROOTFS_POSTPROCESS_COMMAND += "alientek_disable_default_services; "
+
+do_rootfs[file-checksums] += "${THISDIR}/files/disable-default-services.sh:True"
+
+alientek_disable_default_services() {
+    sh "${THISDIR}/files/disable-default-services.sh" "${IMAGE_ROOTFS}"
+}

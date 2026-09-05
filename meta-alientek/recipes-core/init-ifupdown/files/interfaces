@@ -1,0 +1,3 @@
+# 由内核 ip= 参数带起 eth1，用户态不再重复配置
+auto lo
+iface lo inet loopback
