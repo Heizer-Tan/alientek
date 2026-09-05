@@ -173,15 +173,15 @@
 	};
 
 	/* 教程外设（自写 platform 驱动，从 16/15/17 章提到默认启用）*/
-	imx_aes_led {
+	imx_alientek_led {
 		compatible = "alientek,led";
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_aes_led>;
+		pinctrl-0 = <&pinctrl_alientek_led>;
 		status = "disabled";   /* 本章实验期间 */
 		led-gpio = <&gpio1 3 GPIO_ACTIVE_LOW>;
 	};
 
-    aesdtsled {
+    alientekdtsled {
 		compatible = "alientek,dtsled";
 		status = "okay";
 		#address-cells = <1>;
@@ -205,17 +205,17 @@
 		};
 	};
 
-	/* 与 imx_aes_led 同脚 GPIO1_IO03，二者只能启用其一 */
-	aes_gpio_leds {
+	/* 与 imx_alientek_led 同脚 GPIO1_IO03，二者只能启用其一 */
+	alientek_gpio_leds {
 		compatible = "gpio-leds";
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_beep>;
+		pinctrl-0 = <&pinctrl_beep &pinctrl_alientek_led>;
 		status = "okay";
 
-		/* disabled：不注册 /sys/class/leds/aes-led0，节点保留便于以后启用 */
-		aes_led0 {
+		/* disabled：不注册 /sys/class/leds/alientek-led0，节点保留便于以后启用 */
+		alientek_led0 {
 			status = "okay";
-			label = "aes-led0";
+			label = "alientek-led0";
 			gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
 			default-state = "on";
 			linux,default-trigger = "heartbeat";
@@ -834,7 +834,7 @@
 	};
 
 	/* 教程外设 pinctrl（LED / 蜂鸣器 / 按键 / ECSPI3-ICM20608）*/
-	pinctrl_aes_led: led_grp {
+	pinctrl_alientek_led: led_grp {
 		fsl,pins = <
 			MX6UL_PAD_GPIO1_IO03__GPIO1_IO03    0x10B0
 		>;

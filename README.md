@@ -136,3 +136,6 @@ run netboot
 3. 内核 panic 无根：先 mmc 根，再 nfs 根，对比 `printenv bootargs`
 4. 单网口：KSZ8081 reset（GPIO5_IO7/8）、MDIO 地址 2/1
 5. NFS：板端 ping `serverip` → TFTP 能否取 zImage → export 与 `no_root_squash` → `nfsvers=3`
+
+
+在此感谢 [imx-forge](https://github.com/Awesome-Embedded-Learning-Studio/imx-forge) 项目为本项目设备树设计提供的宝贵参考。

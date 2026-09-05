@@ -8,7 +8,7 @@
 #include "imx6ull-alientek-alpha.dtsi"
 
 / {
-	model = "Awesome Embedded Studio IMX6ULL (i.mx NXP)";
+	model = "ALIENTEK i.MX6ULL Alpha";
 	compatible = "fsl,imx6ull-14x14-evk", "fsl,imx6ull";
 };
 
