@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>板端传感器数据</title>
+<style>
+body { font-family: sans-serif; margin: 1rem 1.25rem; color: #222; }
+h1 { font-size: 1.35rem; margin: 0 0 1rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: end; margin-bottom: 1rem; }
+label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 0.25rem; }
+input { padding: 0.35rem 0.5rem; }
+button { padding: 0.45rem 0.9rem; cursor: pointer; }
+#msg { margin: 0.5rem 0 1rem; color: #666; min-height: 1.2em; }
+canvas { width: 100%; max-width: 960px; height: 280px; border: 1px solid #ccc; display: block; }
+table { border-collapse: collapse; width: 100%; max-width: 960px; margin-top: 1rem; font-size: 0.9rem; }
+th, td { border: 1px solid #ddd; padding: 0.4rem 0.55rem; text-align: left; }
+th { background: #f3f3f3; }
+.legend { margin-top: 0.5rem; font-size: 0.85rem; }
+.legend span { margin-right: 1rem; }
+.ir { color: #c0392b; }
+.als { color: #27ae60; }
+.ps { color: #2980b9; }
+</style>
+</head>
+<body>
+<h1>板端传感器数据</h1>
+<div class="controls">
+  <label>开始<input type="datetime-local" id="fromInput"></label>
+  <label>结束<input type="datetime-local" id="toInput"></label>
+  <button type="button" id="queryBtn">查询</button>
+</div>
+<p id="msg"></p>
+<canvas id="chart" width="960" height="280"></canvas>
+<div class="legend">
+  <span class="ir">■ IR</span>
+  <span class="als">■ ALS</span>
+  <span class="ps">■ PS</span>
+</div>
+<table>
+  <thead>
+    <tr><th>时间</th><th>IR</th><th>ALS</th><th>PS</th></tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+<script>
+(function () {
+  var fromInput = document.getElementById("fromInput");
+  var toInput = document.getElementById("toInput");
+  var queryBtn = document.getElementById("queryBtn");
+  var msg = document.getElementById("msg");
+  var tbody = document.getElementById("tbody");
+  var canvas = document.getElementById("chart");
+  var ctx = canvas.getContext("2d");
+
+  function pad(n) { return n < 10 ? "0" + n : String(n); }
+
+  function toLocalInputValue(d) {
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  function inputToUnix(el) {
+    var v = el.value;
+    if (!v) return null;
+    var t = Date.parse(v);
+    if (isNaN(t)) return null;
+    return Math.floor(t / 1000);
+  }
+
+  function setDefaultRange() {
+    var now = new Date();
+    var from = new Date(now.getTime() - 24 * 3600 * 1000);
+    toInput.value = toLocalInputValue(now);
+    fromInput.value = toLocalInputValue(from);
+  }
+
+  function formatTs(ts) {
+    var d = new Date(ts * 1000);
+    return d.toLocaleString();
+  }
+
+  function clearTable() {
+    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+  }
+
+  function fillTable(rows) {
+    clearTable();
+    var sorted = rows.slice().sort(function (a, b) { return b.ts - a.ts; });
+    for (var i = 0; i < sorted.length; i++) {
+      var r = sorted[i];
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + formatTs(r.ts) + "</td><td>" + r.ir +
+        "</td><td>" + r.als + "</td><td>" + r.ps + "</td>";
+      tbody.appendChild(tr);
+    }
+  }
+
+  function drawChart(rows) {
+    var w = canvas.width;
+    var h = canvas.height;
+    var padL = 48;
+    var padR = 16;
+    var padT = 16;
+    var padB = 28;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#fafafa";
+    ctx.fillRect(0, 0, w, h);
+    if (!rows || rows.length === 0) {
+      ctx.fillStyle = "#888";
+      ctx.font = "14px sans-serif";
+      ctx.fillText("暂无数据", padL, h / 2);
+      return;
+    }
+    var minT = rows[0].ts;
+    var maxT = rows[rows.length - 1].ts;
+    if (maxT === minT) maxT = minT + 1;
+    var maxY = 1;
+    for (var i = 0; i < rows.length; i++) {
+      maxY = Math.max(maxY, rows[i].ir, rows[i].als, rows[i].ps);
+    }
+    function xOf(ts) {
+      return padL + (ts - minT) / (maxT - minT) * (w - padL - padR);
+    }
+    function yOf(v) {
+      return padT + (1 - v / maxY) * (h - padT - padB);
+    }
+    ctx.strokeStyle = "#ddd";
+    ctx.beginPath();
+    ctx.moveTo(padL, padT);
+    ctx.lineTo(padL, h - padB);
+    ctx.lineTo(w - padR, h - padB);
+    ctx.stroke();
+    function series(key, color) {
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      for (var j = 0; j < rows.length; j++) {
+        var x = xOf(rows[j].ts);
+        var y = yOf(rows[j][key]);
+        if (j === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    series("ir", "#c0392b");
+    series("als", "#27ae60");
+    series("ps", "#2980b9");
+  }
+
+  function query() {
+    var fromTs = inputToUnix(fromInput);
+    var toTs = inputToUnix(toInput);
+    if (fromTs === null || toTs === null || fromTs > toTs) {
+      msg.textContent = "时间范围无效";
+      return;
+    }
+    msg.textContent = "查询中…";
+    var url = "/api/samples?from=" + fromTs + "&to=" + toTs;
+    fetch(url).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    }).then(function (rows) {
+      if (!rows || rows.length === 0) {
+        msg.textContent = "暂无数据";
+        clearTable();
+        drawChart([]);
+        return;
+      }
+      msg.textContent = "共 " + rows.length + " 条";
+      fillTable(rows);
+      drawChart(rows);
+    }).catch(function (e) {
+      msg.textContent = "查询失败: " + e.message;
+      clearTable();
+      drawChart([]);
+    });
+  }
+
+  setDefaultRange();
+  queryBtn.addEventListener("click", query);
+  query();
+})();
+</script>
+</body>
+</html>
