@@ -16,6 +16,8 @@ CORE_IMAGE_EXTRA_INSTALL += " \
     ap3216c-logger \
     board-web \
     sqlite3 \
+    board-ntpdate \
+    busybox-hwclock \
 "
 
 # NFS root 场景下 eth1 由内核 ip= 参数配置，用户态网络文件仅保留 lo

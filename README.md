@@ -116,6 +116,21 @@ ap3216c-read -w
 - 启停：`/etc/init.d/ap3216c-logger start|stop`；`/etc/init.d/board-web start|stop`
 - 手动读数仍可用：`ap3216c-read`
 
+## 时间同步（NTP）
+
+开机顺序：`busybox-hwclock` 先从板载电池保持的 **SNVS RTC** 恢复时间，再由 `board-ntpdate`（BusyBox `ntpd -q`）对时；关机时 `hwclock` 会把系统时间写回 RTC。默认 NTP 服务器 `ntp.aliyun.com`、`ntp.tencent.com`，在 `ap3216c-logger` 之前执行。
+
+```bash
+ls -l /dev/rtc0
+hwclock -r
+date -u
+/etc/init.d/board-ntpdate start   # 手动再对一次
+hwclock -w                        # 首次校时后写回 RTC
+# 自定义服务器：NTP_SERVERS="cn.pool.ntp.org" /etc/init.d/board-ntpdate start
+```
+
+需板子能访问外网 NTP；失败时启动不中断，仍可依赖 RTC 电池保持大致正确时间。
+
 ## NFS 启动（netboot，默认方案）
 
 1. 编译完成后导出（需有 `*.rootfs.tar.zst`；仅有 `wic.gz` 时先完整编一次镜像）：

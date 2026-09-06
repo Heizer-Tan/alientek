@@ -1,0 +1,48 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          board-ntpdate
+# Required-Start:    $local_fs $network
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:
+# Short-Description: One-shot NTP clock sync before sensor logger
+### END INIT INFO
+
+# 开机一次性 NTP 校时；失败不阻断启动
+
+NAME=board-ntpdate
+# 国内可达优先；可用环境变量覆盖：NTP_SERVERS="a.b.c d.e.f"
+NTP_SERVERS="${NTP_SERVERS:-ntp.aliyun.com ntp.tencent.com}"
+
+do_start() {
+	# BusyBox ntpd：-q 对时后退出，-n 前台
+	for server in $NTP_SERVERS; do
+		if ntpd -q -n -p "$server" >/dev/null 2>&1; then
+			echo "$NAME: synced via $server ($(date -u '+%Y-%m-%d %H:%M:%S UTC'))"
+			return 0
+		fi
+		echo "$NAME: failed via $server, try next"
+	done
+	echo "$NAME: WARNING all NTP servers failed; clock may be wrong" >&2
+	return 0
+}
+
+case "$1" in
+start)
+	do_start
+	;;
+stop)
+	;;
+restart)
+	do_start
+	;;
+status)
+	date -u
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart|status}"
+	exit 1
+	;;
+esac
+
+exit 0

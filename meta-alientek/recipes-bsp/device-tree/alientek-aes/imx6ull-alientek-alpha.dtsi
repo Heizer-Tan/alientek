@@ -9,6 +9,11 @@
 		stdout-path = &uart1;
 	};
 
+	/* 板载纽扣电池给片内 SNVS RTC 供电，rtc0 直接指向 snvs_rtc */
+	aliases {
+		rtc0 = &snvs_rtc;
+	};
+
 	memory@80000000 {
 		device_type = "memory";
 		reg = <0x80000000 0x20000000>;
@@ -458,6 +463,11 @@
 };
 
 &snvs_pwrkey {
+	status = "okay";
+};
+
+/* Alpha 板用片内 SNVS RTC，纽扣电池掉电保持时间 */
+&snvs_rtc {
 	status = "okay";
 };
 
