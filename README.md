@@ -17,6 +17,8 @@
 
 构建入口：`./scripts/build.sh` → `kas-container` + `kas/alientek-alpha.yml`。升级功能额外引入 `meta-swupdate`。
 
+当前板级功能总览见 `docs/board-function-overview.md`，SWUpdate 板端升级/回滚实测步骤见 `docs/swu-upgrade-validation.md`。
+
 ## 依赖
 
 - Docker 或 Podman
