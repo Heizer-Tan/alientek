@@ -1,0 +1,61 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          ap3216c-logger
+# Required-Start:    $local_fs
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: AP3216C periodic sampling to SQLite
+### END INIT INFO
+
+# ap3216c-logger SysV 脚本：默认开机自启
+
+NAME=ap3216c-logger
+DAEMON=/usr/bin/ap3216c-logger
+PIDFILE=/var/run/ap3216c-logger.pid
+
+[ -x "$DAEMON" ] || exit 0
+
+do_start() {
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "$NAME already running"
+		return 0
+	fi
+	start-stop-daemon --start --quiet --background \
+		--make-pidfile --pidfile "$PIDFILE" \
+		--exec "$DAEMON"
+	echo "Started $NAME"
+}
+
+do_stop() {
+	start-stop-daemon --stop --quiet --pidfile "$PIDFILE" --retry 5
+	rm -f "$PIDFILE"
+	echo "Stopped $NAME"
+}
+
+case "$1" in
+start)
+	do_start
+	;;
+stop)
+	do_stop
+	;;
+restart)
+	do_stop
+	do_start
+	;;
+status)
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "$NAME is running"
+		exit 0
+	fi
+	echo "$NAME is not running"
+	exit 3
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart|status}"
+	exit 1
+	;;
+esac
+
+exit 0
