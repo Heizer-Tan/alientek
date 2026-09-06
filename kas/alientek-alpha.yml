@@ -43,8 +43,8 @@ local_conf_header:
   providers: |
     PREFERRED_PROVIDER_virtual/bootloader = "u-boot"
     PREFERRED_PROVIDER_virtual/kernel = "linux"
-    PREFERRED_VERSION_u-boot = "2025.04%"
-    PREFERRED_VERSION_u-boot-tools = "2025.04%"
+    PREFERRED_VERSION_u-boot = "2026.07%"
+    PREFERRED_VERSION_u-boot-tools = "2026.07%"
   build-cache: |
     # downloads 在仓库根（与 build/ 分离）；sstate 仍用 build/sstate-cache
     # （首次改 DL_DIR 时勿丢弃已有 build/downloads，应迁到 ../downloads）

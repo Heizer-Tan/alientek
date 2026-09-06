@@ -5,7 +5,6 @@ SRC_URI += " \
     file://imx6ull-alientek-alpha.dts \
     file://imx6ull-alientek-alpha.dtsi \
     file://boot.cmd \
-    file://0001-mx6ullevk-default-fdt-alientek-alpha.patch \
 "
 
 # 解包后注入板级 defconfig / 板级 DTS，并登记 Makefile
@@ -27,4 +26,12 @@ do_configure:prepend() {
         awk '{print} /imx6ull-14x14-evk\.dtb/ && !done {print "\timx6ull-alientek-alpha.dtb \\"; done=1}' \
             "${mk}" > "${mk}.tmp" && mv "${mk}.tmp" "${mk}"
     fi
+
+    cfg="${S}/include/configs/mx6ullevk.h"
+    if [ ! -f "${cfg}" ]; then
+        die "未找到 ${cfg}，u-boot 配置头布局已变"
+    fi
+    sed -i 's/"fdt_file=undefined\\0"/"fdt_file=imx6ull-alientek-alpha.dtb\\0"/' "${cfg}"
+    sed -i 's/imx6ulz-14x14-evk.dtb/imx6ull-alientek-alpha.dtb/' "${cfg}"
+    sed -i 's/imx6ull-14x14-evk.dtb/imx6ull-alientek-alpha.dtb/' "${cfg}"
 }

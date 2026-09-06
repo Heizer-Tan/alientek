@@ -1,9 +1,9 @@
 # 正点原子 i.MX6ULL 阿尔法 Yocto BSP
 
-当前板级默认：主线 **U-Boot 2025.04** + **Linux 7.1.4**，设备树 `imx6ull-alientek-alpha.dtb`（`PREFERRED_PROVIDER` 为 `u-boot` / `linux`）。
+当前板级默认：主线 **U-Boot 2026.07** + **Linux 7.1.4**，设备树 `imx6ull-alientek-alpha.dtb`（`PREFERRED_PROVIDER` 为 `u-boot` / `linux`）。
 
 
-第一期：主线 `linux (7.1.4)` + `u-boot (2025.04)`，TF 卡启动，双网口（AES DT：KSZ8081），NFS 根文件系统。
+第一期：主线 `linux (7.1.4)` + `u-boot (2026.07)`，TF 卡启动，双网口（AES DT：KSZ8081），NFS 根文件系统。
 
 ## 目录说明
 
@@ -80,6 +80,33 @@ KAS_USE_HOST=1 ./scripts/build.sh
 产物在 kas 工作区的 `build/tmp/deploy/images/imx6ull-alientek-alpha/`：`u-boot.imx`、`zImage`、`imx6ull-alientek-alpha.dtb`、`alientek-image-base-imx6ull-alientek-alpha.rootfs.wic`。
 
 上游层固定 **scarthgap**（见 `kas/alientek-alpha.yml`）；三层分支须一致，不要混用。
+
+## U-Boot Recipe 结构
+
+当前 U-Boot 配方按“版本层 + 公共层 + 角色层 + 板级层”拆分，后续升级主线版本时尽量只增量改动：
+
+- `meta-alientek/recipes-bsp/u-boot/u-boot-source-<ver>.inc`：只放版本号、tarball 地址、sha256、源码目录
+- `meta-alientek/recipes-bsp/u-boot/u-boot-alientek-common.inc`：放跨版本共用逻辑，例如公共依赖、构建目录、release tarball 补 `.git`
+- `meta-alientek/recipes-bsp/u-boot/u-boot-target-alientek.inc`：放目标 U-Boot 的公共配置
+- `meta-alientek/recipes-bsp/u-boot/u-boot-tools-alientek.inc`：放 `u-boot-tools` 共用兼容逻辑
+- `meta-alientek/recipes-bsp/u-boot/u-boot_<ver>.bb`、`u-boot-tools_<ver>.bb`：仅负责组合上述层
+- `meta-alientek/recipes-bsp/u-boot/u-boot_%.bbappend`：只负责阿尔法板 `defconfig`、DTS 和默认 `fdt_file` 注入
+
+后续如果升级到新的主线版本，通常流程是：
+
+```bash
+# 1. 新增版本层
+meta-alientek/recipes-bsp/u-boot/u-boot-source-2027.xx.inc
+
+# 2. 新增薄入口
+meta-alientek/recipes-bsp/u-boot/u-boot_2027.xx.bb
+meta-alientek/recipes-bsp/u-boot/u-boot-tools_2027.xx.bb
+
+# 3. 更新版本选择
+kas/alientek-alpha.yml
+```
+
+若上游行为有变化，优先修改 `u-boot-target-alientek.inc` 或 `u-boot-tools-alientek.inc`，尽量不要把兼容逻辑重新散回各个版本文件。
 
 ## 烧写 TF 卡（mmcboot）
 
