@@ -12,7 +12,7 @@ software =
                 {
                     filename = "alientek-image-base-imx6ull-alientek-alpha.rootfs.ext4.gz";
                     device = "/dev/mmcblk0p2";
-                    compressed = true;
+                    compressed = "zlib";
                 },
                 {
                     filename = "u-boot.imx";
@@ -59,7 +59,7 @@ software =
                 {
                     filename = "alientek-image-base-imx6ull-alientek-alpha.rootfs.ext4.gz";
                     device = "/dev/mmcblk0p3";
-                    compressed = true;
+                    compressed = "zlib";
                 },
                 {
                     filename = "u-boot.imx";
