@@ -109,6 +109,13 @@ ap3216c-read -w
 
 若手靠近传感器，`ps` 应上升；遮光/打光时，`als` 应变化。
 
+## 传感器入库与 Web 查询
+
+- 采集：`ap3216c-logger` 每 5 分钟写入 `/var/lib/ap3216c/ap3216c.db`，保留 7 天
+- 查询：浏览器打开 `http://<板子IP>:8080/`
+- 启停：`/etc/init.d/ap3216c-logger start|stop`；`/etc/init.d/board-web start|stop`
+- 手动读数仍可用：`ap3216c-read`
+
 ## NFS 启动（netboot，默认方案）
 
 1. 编译完成后导出（需有 `*.rootfs.tar.zst`；仅有 `wic.gz` 时先完整编一次镜像）：

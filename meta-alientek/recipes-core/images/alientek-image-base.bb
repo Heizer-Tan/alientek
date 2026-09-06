@@ -13,6 +13,9 @@ CORE_IMAGE_EXTRA_INSTALL += " \
     key-monitor \
     ap3216c-read \
     ap3216c-module \
+    ap3216c-logger \
+    board-web \
+    sqlite3 \
 "
 
 # NFS root 场景下 eth1 由内核 ip= 参数配置，用户态网络文件仅保留 lo
