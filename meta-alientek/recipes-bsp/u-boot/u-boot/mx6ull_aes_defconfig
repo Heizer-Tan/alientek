@@ -13,6 +13,10 @@ CONFIG_DEFAULT_DEVICE_TREE="imx6ull-alientek-alpha"
 CONFIG_SYS_MEMTEST_START=0x80000000
 CONFIG_SYS_MEMTEST_END=0x88000000
 CONFIG_SUPPORT_RAW_INITRD=y
+CONFIG_BOOTCOUNT_LIMIT=y
+CONFIG_BOOTCOUNT_ENV=y
+CONFIG_BOOTCOUNT_BOOTLIMIT=3
+CONFIG_BOOTCOUNT_ALTBOOTCMD="if test \"${active_slot}\" = \"B\"; then setenv active_slot A; else setenv active_slot B; fi; setenv upgrade_available 0; setenv bootcount 0; saveenv; run bootcmd"
 CONFIG_USE_BOOTCOMMAND=y
 CONFIG_BOOTCOMMAND="setenv fdt_file imx6ull-alientek-alpha.dtb; setenv fdtfile imx6ull-alientek-alpha.dtb; mmc dev ${mmcdev}; if mmc rescan; then if run loadbootscript; then run bootscript; else if run loadimage; then run mmcboot; else run netboot; fi; fi; else run netboot; fi"
 CONFIG_SYS_PBSIZE=532

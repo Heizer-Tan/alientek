@@ -21,6 +21,9 @@ repos:
   meta-freescale:
     url: https://git.yoctoproject.org/git/meta-freescale
     branch: scarthgap
+  meta-swupdate:
+    url: https://github.com/sbabic/meta-swupdate.git
+    branch: scarthgap
   meta-alientek:
     path: meta-alientek
 

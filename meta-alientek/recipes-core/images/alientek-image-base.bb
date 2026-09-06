@@ -10,11 +10,15 @@ CORE_IMAGE_EXTRA_INSTALL += " \
     iproute2 \
     iputils \
     i2c-tools \
+    libubootenv \
+    libubootenv-bin \
     key-monitor \
     ap3216c-read \
     ap3216c-module \
     ap3216c-logger \
     board-web \
+    board-update-tools \
+    swupdate \
     sqlite3 \
     board-ntpdate \
     busybox-hwclock \

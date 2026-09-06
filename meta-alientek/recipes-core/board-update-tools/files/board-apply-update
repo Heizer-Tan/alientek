@@ -1,0 +1,41 @@
+#!/bin/sh
+
+set -eu
+
+readActiveSlot() {
+    fw_printenv -n active_slot 2>/dev/null || printf '%s\n' "A"
+}
+
+selectSwuMode() {
+    activeSlot="$(readActiveSlot)"
+    case "${activeSlot}" in
+        A) printf '%s\n' "stable,slotB" ;;
+        B) printf '%s\n' "stable,slotA" ;;
+        *)
+            printf '未知 active_slot=%s，默认写入 slotB\n' "${activeSlot}" >&2
+            printf '%s\n' "stable,slotB"
+            ;;
+    esac
+}
+
+requireFile() {
+    swuPath="$1"
+    if [ ! -f "${swuPath}" ]; then
+        printf '升级包不存在: %s\n' "${swuPath}" >&2
+        exit 1
+    fi
+}
+
+main() {
+    if [ "$#" -ne 1 ]; then
+        printf '用法: %s <update.swu>\n' "$0" >&2
+        exit 1
+    fi
+
+    requireFile "$1"
+    mode="$(selectSwuMode)"
+    printf '当前槽位: %s，执行模式: %s\n' "$(readActiveSlot)" "${mode}"
+    exec swupdate -v -i "$1" -e "${mode}"
+}
+
+main "$@"

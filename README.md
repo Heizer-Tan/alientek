@@ -15,7 +15,7 @@
 | `docs/` | 设计与计划文档（含历史归档） |
 | `poky/`、`meta-freescale/`、`meta-openembedded/` | **kas 检出的上游层**，勿当板级资产提交 |
 
-构建入口：`./scripts/build.sh` → `kas-container` + `kas/alientek-alpha.yml`。
+构建入口：`./scripts/build.sh` → `kas-container` + `kas/alientek-alpha.yml`。升级功能额外引入 `meta-swupdate`。
 
 ## 依赖
 
@@ -77,7 +77,7 @@ docker tag ghcr.nju.edu.cn/siemens/kas/kas:5.5 ghcr.io/siemens/kas/kas:5.5
 KAS_USE_HOST=1 ./scripts/build.sh
 ```
 
-产物在 kas 工作区的 `build/tmp/deploy/images/imx6ull-alientek-alpha/`：`u-boot.imx`、`zImage`、`imx6ull-alientek-alpha.dtb`、`alientek-image-base-imx6ull-alientek-alpha.rootfs.wic`。
+产物在 kas 工作区的 `build/tmp/deploy/images/imx6ull-alientek-alpha/`：`u-boot.imx`、`zImage`、`imx6ull-alientek-alpha.dtb`、`alientek-image-base-imx6ull-alientek-alpha.rootfs.wic`。若构建 `alientek-image-update`，还会生成单文件升级包 `*.swu`。
 
 上游层固定 **scarthgap**（见 `kas/alientek-alpha.yml`）；三层分支须一致，不要混用。
 
@@ -119,6 +119,64 @@ sudo bmaptool copy alientek-image-base-imx6ull-alientek-alpha.rootfs.wic.gz /dev
 
 拨码选择 SD 启动，串口 115200。U-Boot 执行 `run mmcboot`。若找不到系统分区，在 U-Boot 里 `mmc list` 后 `setenv mmcdev 0` 再 `run mmcboot`。
 
+## 单一升级包（SWUpdate + A/B）
+
+当前量产升级链路采用：
+
+- 一个共享 `boot` FAT 分区，保存 `zImage`、`imx6ull-alientek-alpha.dtb`、`boot.scr`
+- 两个 ext4 根文件系统槽位：`rootfsA`、`rootfsB`
+- U-Boot 环境变量 `active_slot`、`upgrade_available`、`bootcount`
+- Linux 用户态通过 `swupdate` 写入“非活动槽位”，首启成功后由 `board-upgrade-commit` 提交新槽
+
+默认分区布局见 `meta-alientek/wic/imx6ull-alientek-ab.wks.in`：
+
+- `u-boot`：原始写入 TF 卡前部
+- `boot`：FAT，共享启动文件
+- `rootfsA`：当前槽位或候选槽位
+- `rootfsB`：当前槽位或候选槽位
+
+### 构建 `.swu`
+
+```bash
+./scripts/build.sh alientek-image-update
+```
+
+生成物位于 `build/tmp/deploy/images/imx6ull-alientek-alpha/`，包含：
+
+- `alientek-image-update-imx6ull-alientek-alpha.swu`
+- `alientek-image-base-imx6ull-alientek-alpha.rootfs.ext4.gz`
+- `u-boot.imx`
+- `zImage`
+- `imx6ull-alientek-alpha.dtb`
+- `boot.scr`
+
+### 板端执行升级
+
+将 `.swu` 拷到板子后执行：
+
+```bash
+board-apply-update /tmp/alientek-image-update-imx6ull-alientek-alpha.swu
+reboot
+```
+
+`board-apply-update` 会读取当前 `active_slot`，自动选择 `stable,slotA` 或 `stable,slotB`，始终写入非活动 rootfs 槽。
+
+### 首启确认与回滚
+
+- 升级阶段会把 `upgrade_available=1` 并切换 `active_slot`
+- U-Boot 启用 `bootcount` / `bootlimit=3`
+- 若连续启动失败超过限制，`altbootcmd` 会把槽位切回上一个分区
+- 新系统正常启动后，`/etc/init.d/board-upgrade-commit` 会清除 `upgrade_available` 并把 `bootcount` 归零
+- 板端实测步骤见 `docs/swu-upgrade-validation.md`
+
+可在板上查看状态：
+
+```bash
+fw_printenv active_slot
+fw_printenv upgrade_available
+fw_printenv bootcount
+```
+
 ## 按键演示（key-monitor）
 
 串口登录后：`key-monitor`（自动找 `gpio-keys`），按 KEY0 会打印 `type=1 code=28 value=1/0`。可选自启：`update-rc.d key-monitor defaults && /etc/init.d/key-monitor start`（写 syslog）。
@@ -158,7 +216,7 @@ hwclock -w                        # 首次校时后写回 RTC
 
 需板子能访问外网 NTP；失败时启动不中断，仍可依赖 RTC 电池保持大致正确时间。
 
-## NFS 启动（netboot，默认方案）
+## NFS 启动（netboot，调试入口）
 
 1. 编译完成后导出（需有 `*.rootfs.tar.zst`；仅有 `wic.gz` 时先完整编一次镜像）：
 
@@ -178,7 +236,7 @@ sudo ./scripts/export-nfs-tftp.sh \
 
 `sudo exportfs -ra`，并启动 tftpd 与 nfs-server。
 
-3. 板端与 PC 同一网段。当前 `boot.cmd` 默认 `run netboot`（静态 IP + eth1），示例：
+3. 板端与 PC 同一网段。当前 `boot.cmd` 保留 `run netboot` 作为调试入口（静态 IP + eth1），示例：
 
 ```
 setenv serverip 192.168.5.27

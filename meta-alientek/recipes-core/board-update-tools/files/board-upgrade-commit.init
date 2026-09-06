@@ -1,0 +1,50 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          board-upgrade-commit
+# Required-Start:    $local_fs
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:
+# Short-Description: 首启成功后提交升级槽位
+### END INIT INFO
+
+set -eu
+
+logMsg() {
+    logger -t board-upgrade-commit "$1"
+    printf '%s\n' "$1"
+}
+
+readEnvOrDefault() {
+    envName="$1"
+    defaultValue="$2"
+    fw_printenv -n "${envName}" 2>/dev/null || printf '%s\n' "${defaultValue}"
+}
+
+commitSlot() {
+    activeSlot="$(readEnvOrDefault active_slot A)"
+    upgradeAvailable="$(readEnvOrDefault upgrade_available 0)"
+
+    if [ "${upgradeAvailable}" != "1" ]; then
+        logMsg "当前无需提交槽位，active_slot=${activeSlot}"
+        return 0
+    fi
+
+    fw_setenv bootcount 0
+    fw_setenv upgrade_available 0
+    fw_setenv last_good_slot "${activeSlot}"
+    logMsg "已提交槽位 ${activeSlot}"
+}
+
+case "${1:-}" in
+    start)
+        commitSlot
+        ;;
+    stop|restart|reload)
+        exit 0
+        ;;
+    *)
+        printf '用法: %s {start|stop|restart|reload}\n' "$0" >&2
+        exit 1
+        ;;
+esac
