@@ -6,6 +6,7 @@ require recipes-core/images/core-image-base.bb
 IMAGE_FEATURES += "ssh-server-openssh"
 
 CORE_IMAGE_EXTRA_INSTALL += " \
+    curl \
     ethtool \
     iproute2 \
     iputils \

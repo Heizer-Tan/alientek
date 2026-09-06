@@ -222,7 +222,7 @@ hwclock -w                        # 首次校时后写回 RTC
 
 ## 本地启动网络
 
-本地 MMC 启动场景下，镜像默认安装 `board-network`，在开机时为 `eth1` 配置静态地址 `192.168.5.201/24` 和默认网关 `192.168.5.1`。现场可修改 `etc/default/board-network` 后重启或执行 `/etc/init.d/board-network restart` 生效。
+本地 MMC 启动场景下，镜像默认安装 `board-network`，在开机时为 `eth1` 配置静态地址 `192.168.5.201/24`、默认网关 `192.168.5.1`，并写入 DNS `223.5.5.5`、`119.29.29.29`。现场可修改 `etc/default/board-network` 后重启或执行 `/etc/init.d/board-network restart` 生效。
 
 ## NFS 启动（netboot，调试入口）
 

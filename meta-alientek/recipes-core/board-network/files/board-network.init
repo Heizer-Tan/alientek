@@ -11,16 +11,31 @@
 set -eu
 
 CONFIG_FILE="/etc/default/board-network"
+RESOLV_FILE="/etc/resolv.conf"
 
 loadConfig() {
     BOARD_NET_IFACE="${BOARD_NET_IFACE:-eth1}"
     BOARD_NET_ADDR="${BOARD_NET_ADDR:-192.168.5.201/24}"
     BOARD_NET_GATEWAY="${BOARD_NET_GATEWAY:-192.168.5.1}"
+    BOARD_NET_DNS1="${BOARD_NET_DNS1:-223.5.5.5}"
+    BOARD_NET_DNS2="${BOARD_NET_DNS2:-119.29.29.29}"
 
     if [ -f "${CONFIG_FILE}" ]; then
         # shellcheck disable=SC1090
         . "${CONFIG_FILE}"
     fi
+}
+
+writeResolvConf() {
+    {
+        printf '# 由 board-network 自动生成，请通过 %s 修改\n' "${CONFIG_FILE}"
+        if [ -n "${BOARD_NET_DNS1}" ]; then
+            printf 'nameserver %s\n' "${BOARD_NET_DNS1}"
+        fi
+        if [ -n "${BOARD_NET_DNS2}" ]; then
+            printf 'nameserver %s\n' "${BOARD_NET_DNS2}"
+        fi
+    } > "${RESOLV_FILE}"
 }
 
 hasIpv4Address() {
@@ -32,11 +47,13 @@ startNetwork() {
     ip link set dev "${BOARD_NET_IFACE}" up
 
     if hasIpv4Address; then
+        writeResolvConf
         return 0
     fi
 
     ip addr add "${BOARD_NET_ADDR}" dev "${BOARD_NET_IFACE}"
     ip route replace default via "${BOARD_NET_GATEWAY}" dev "${BOARD_NET_IFACE}"
+    writeResolvConf
 }
 
 case "${1:-}" in
