@@ -7,6 +7,7 @@ RDEPENDS:${PN} = "swupdate libubootenv-bin"
 SRC_URI = " \
     file://board-apply-update \
     file://board-upgrade-commit.init \
+    file://hwrevision \
 "
 
 inherit update-rc.d
@@ -21,8 +22,12 @@ do_install() {
     install -d "${D}${sysconfdir}/init.d"
     install -m 0755 "${WORKDIR}/board-upgrade-commit.init" \
         "${D}${sysconfdir}/init.d/board-upgrade-commit"
+
+    install -d "${D}${sysconfdir}"
+    install -m 0644 "${WORKDIR}/hwrevision" "${D}${sysconfdir}/hwrevision"
 }
 
 FILES:${PN} += " \
+    ${sysconfdir}/hwrevision \
     ${sysconfdir}/init.d/board-upgrade-commit \
 "

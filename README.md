@@ -177,6 +177,8 @@ fw_printenv upgrade_available
 fw_printenv bootcount
 ```
 
+当前板级 `boot.scr` 会按 `active_slot` 在 `/dev/mmcblk0p2` 与 `/dev/mmcblk0p3` 间切换；这是因为现有 U-Boot 配置未启用 `part` 命令，暂未使用 `PARTUUID` 方式传根分区。
+
 ## 按键演示（key-monitor）
 
 串口登录后：`key-monitor`（自动找 `gpio-keys`），按 KEY0 会打印 `type=1 code=28 value=1/0`。可选自启：`update-rc.d key-monitor defaults && /etc/init.d/key-monitor start`（写 syslog）。
@@ -215,6 +217,10 @@ hwclock -w                        # 首次校时后写回 RTC
 ```
 
 需板子能访问外网 NTP；失败时启动不中断，仍可依赖 RTC 电池保持大致正确时间。
+
+## 本地启动网络
+
+本地 MMC 启动场景下，镜像默认安装 `board-network`，在开机时为 `eth1` 配置静态地址 `192.168.5.201/24` 和默认网关 `192.168.5.1`。现场可修改 `etc/default/board-network` 后重启或执行 `/etc/init.d/board-network restart` 生效。
 
 ## NFS 启动（netboot，调试入口）
 

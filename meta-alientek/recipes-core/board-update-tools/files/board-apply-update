@@ -6,13 +6,24 @@ readActiveSlot() {
     fw_printenv -n active_slot 2>/dev/null || printf '%s\n' "A"
 }
 
-selectSwuMode() {
+selectTargetSlot() {
     activeSlot="$(readActiveSlot)"
     case "${activeSlot}" in
-        A) printf '%s\n' "stable,slotB" ;;
-        B) printf '%s\n' "stable,slotA" ;;
+        A) printf '%s\n' "B" ;;
+        B) printf '%s\n' "A" ;;
         *)
-            printf '未知 active_slot=%s，默认写入 slotB\n' "${activeSlot}" >&2
+            printf '%s\n' "B"
+            ;;
+    esac
+}
+
+selectSwuMode() {
+    targetSlot="$(selectTargetSlot)"
+    case "${targetSlot}" in
+        A) printf '%s\n' "stable,slotA" ;;
+        B) printf '%s\n' "stable,slotB" ;;
+        *)
+            printf '未知目标槽位=%s，默认写入 slotB\n' "${targetSlot}" >&2
             printf '%s\n' "stable,slotB"
             ;;
     esac
@@ -33,9 +44,14 @@ main() {
     fi
 
     requireFile "$1"
+    targetSlot="$(selectTargetSlot)"
     mode="$(selectSwuMode)"
-    printf '当前槽位: %s，执行模式: %s\n' "$(readActiveSlot)" "${mode}"
-    exec swupdate -v -i "$1" -e "${mode}"
+    printf '当前槽位: %s，目标槽位: %s，执行模式: %s\n' "$(readActiveSlot)" "${targetSlot}" "${mode}"
+    swupdate -v -i "$1" -e "${mode}"
+    fw_setenv active_slot "${targetSlot}"
+    fw_setenv upgrade_available 1
+    fw_setenv bootcount 0
+    printf '升级完成，已切换活动槽位到 %s\n' "${targetSlot}"
 }
 
 main "$@"

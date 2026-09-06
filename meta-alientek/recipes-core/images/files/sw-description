@@ -2,6 +2,7 @@ software =
 {
     version = "@@DISTRO_VERSION@@";
     description = "alientek alpha single swu with a/b rootfs";
+    hardware-compatibility: [ "1.0" ];
 
     stable:
     {
@@ -12,13 +13,11 @@ software =
                     filename = "alientek-image-base-imx6ull-alientek-alpha.rootfs.ext4.gz";
                     device = "/dev/mmcblk0p2";
                     compressed = true;
-                    sha256 = "$swupdate_get_sha256(alientek-image-base-imx6ull-alientek-alpha.rootfs.ext4.gz)";
                 },
                 {
                     filename = "u-boot.imx";
                     device = "/dev/mmcblk0";
                     offset = "1K";
-                    sha256 = "$swupdate_get_sha256(u-boot.imx)";
                 }
             );
 
@@ -31,7 +30,6 @@ software =
                     properties = {
                         atomic-install = "true";
                     };
-                    sha256 = "$swupdate_get_sha256(zImage)";
                 },
                 {
                     filename = "imx6ull-alientek-alpha.dtb";
@@ -41,7 +39,6 @@ software =
                     properties = {
                         atomic-install = "true";
                     };
-                    sha256 = "$swupdate_get_sha256(imx6ull-alientek-alpha.dtb)";
                 },
                 {
                     filename = "boot.scr";
@@ -51,15 +48,9 @@ software =
                     properties = {
                         atomic-install = "true";
                     };
-                    sha256 = "$swupdate_get_sha256(boot.scr)";
                 }
             );
 
-            bootenv: (
-                { name = "active_slot"; value = "A"; },
-                { name = "upgrade_available"; value = "1"; },
-                { name = "bootcount"; value = "0"; }
-            );
         };
 
         slotB:
@@ -69,13 +60,11 @@ software =
                     filename = "alientek-image-base-imx6ull-alientek-alpha.rootfs.ext4.gz";
                     device = "/dev/mmcblk0p3";
                     compressed = true;
-                    sha256 = "$swupdate_get_sha256(alientek-image-base-imx6ull-alientek-alpha.rootfs.ext4.gz)";
                 },
                 {
                     filename = "u-boot.imx";
                     device = "/dev/mmcblk0";
                     offset = "1K";
-                    sha256 = "$swupdate_get_sha256(u-boot.imx)";
                 }
             );
 
@@ -88,7 +77,6 @@ software =
                     properties = {
                         atomic-install = "true";
                     };
-                    sha256 = "$swupdate_get_sha256(zImage)";
                 },
                 {
                     filename = "imx6ull-alientek-alpha.dtb";
@@ -98,7 +86,6 @@ software =
                     properties = {
                         atomic-install = "true";
                     };
-                    sha256 = "$swupdate_get_sha256(imx6ull-alientek-alpha.dtb)";
                 },
                 {
                     filename = "boot.scr";
@@ -108,15 +95,9 @@ software =
                     properties = {
                         atomic-install = "true";
                     };
-                    sha256 = "$swupdate_get_sha256(boot.scr)";
                 }
             );
 
-            bootenv: (
-                { name = "active_slot"; value = "B"; },
-                { name = "upgrade_available"; value = "1"; },
-                { name = "bootcount"; value = "0"; }
-            );
         };
     };
 }

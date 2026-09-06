@@ -16,6 +16,7 @@ CORE_IMAGE_EXTRA_INSTALL += " \
     ap3216c-read \
     ap3216c-module \
     ap3216c-logger \
+    board-network \
     board-web \
     board-update-tools \
     swupdate \

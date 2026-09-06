@@ -11,6 +11,7 @@
 
 - 已刷入支持 A/B 布局的最新 TF 卡镜像
 - 板上已包含 `swupdate`、`board-apply-update`、`fw_printenv`、`fw_setenv`
+- `/etc/hwrevision` 已存在，内容应与升级包内 `hardware-compatibility` 匹配
 - 可通过串口观察 U-Boot 和 Linux 启动日志
 - 已将升级包拷到板子，例如 `/tmp/alientek-image-update-imx6ull-alientek-alpha.rootfs.swu`
 
@@ -64,7 +65,7 @@ mount | grep " / "
 若当前在 A 槽，`/proc/cmdline` 应包含：
 
 ```bash
-root=PARTLABEL=rootfsA
+root=/dev/mmcblk0p2
 ```
 
 ## 2. 验证升级成功路径
@@ -115,7 +116,7 @@ fw_printenv last_good_slot
 
 预期：
 
-- `root=PARTLABEL=rootfsB`
+- `root=/dev/mmcblk0p3`
 - `active_slot=B`
 - `upgrade_available=0`
 - `bootcount=0`
@@ -182,7 +183,7 @@ fw_printenv bootcount
 
 预期：
 
-- `root=PARTLABEL=rootfsA`
+- `root=/dev/mmcblk0p2`
 - `active_slot=A`
 - `upgrade_available=0`
 - `bootcount=0`

@@ -1,0 +1,53 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          board-network
+# Required-Start:    $local_fs
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:
+# Short-Description: 配置板级静态网络
+### END INIT INFO
+
+set -eu
+
+CONFIG_FILE="/etc/default/board-network"
+
+loadConfig() {
+    BOARD_NET_IFACE="${BOARD_NET_IFACE:-eth1}"
+    BOARD_NET_ADDR="${BOARD_NET_ADDR:-192.168.5.201/24}"
+    BOARD_NET_GATEWAY="${BOARD_NET_GATEWAY:-192.168.5.1}"
+
+    if [ -f "${CONFIG_FILE}" ]; then
+        # shellcheck disable=SC1090
+        . "${CONFIG_FILE}"
+    fi
+}
+
+hasIpv4Address() {
+    ip -4 -o addr show dev "${BOARD_NET_IFACE}" | grep -q 'inet '
+}
+
+startNetwork() {
+    loadConfig
+    ip link set dev "${BOARD_NET_IFACE}" up
+
+    if hasIpv4Address; then
+        return 0
+    fi
+
+    ip addr add "${BOARD_NET_ADDR}" dev "${BOARD_NET_IFACE}"
+    ip route replace default via "${BOARD_NET_GATEWAY}" dev "${BOARD_NET_IFACE}"
+}
+
+case "${1:-}" in
+    start|restart|reload)
+        startNetwork
+        ;;
+    stop)
+        exit 0
+        ;;
+    *)
+        printf '用法: %s {start|stop|restart|reload}\n' "$0" >&2
+        exit 1
+        ;;
+esac

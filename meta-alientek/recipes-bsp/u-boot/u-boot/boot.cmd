@@ -16,9 +16,9 @@ setenv ipaddr 192.168.5.201
 setenv gatewayip 192.168.5.1
 setenv netmask 255.255.255.0
 
-# A/B rootfs 约定：p2=rootfsA，p3=rootfsB；启动参数使用 PARTLABEL，避免 mmc 编号漂移
-setenv select_slot 'if test -z "${active_slot}"; then setenv active_slot A; fi; if test "${active_slot}" = "B"; then setenv rootlabel rootfsB; else setenv rootlabel rootfsA; setenv active_slot A; fi'
-setenv mmcargs 'run select_slot; setenv bootargs console=${console} root=PARTLABEL=${rootlabel} rootwait rw'
+# A/B rootfs 约定：p2=rootfsA，p3=rootfsB；当前板级 U-Boot 未启用 part 命令，直接拼 Linux 块设备名
+setenv select_slot 'if test -z "${active_slot}"; then setenv active_slot A; fi; if test "${active_slot}" = "B"; then setenv rootpart 3; setenv rootslot rootfsB; else setenv rootpart 2; setenv rootslot rootfsA; setenv active_slot A; fi'
+setenv mmcargs 'run select_slot; setenv rootdev /dev/mmcblk${mmcdev}p${rootpart}; setenv bootargs console=${console} root=${rootdev} rootwait rw'
 setenv rollback_slot 'if test "${active_slot}" = "B"; then setenv active_slot A; else setenv active_slot B; fi; setenv upgrade_available 0; setenv bootcount 0; saveenv'
 setenv mmcboot "echo Booting from MMC slot ${active_slot}...; run mmcargs; fatload mmc ${mmcdev}:${mmcpart} ${loadaddr} zImage; fatload mmc ${mmcdev}:${mmcpart} ${fdt_addr_r} ${fdtfile}; bootz ${loadaddr} - ${fdt_addr_r}"
 
