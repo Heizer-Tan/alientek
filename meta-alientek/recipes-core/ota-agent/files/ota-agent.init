@@ -1,0 +1,66 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          ota-agent
+# Required-Start:    $local_fs $network
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: 板端 MQTT OTA Agent
+### END INIT INFO
+
+set -eu
+
+agentName="ota-agent"
+agentBinary="/usr/bin/ota-agent"
+pidFile="/var/run/ota-agent.pid"
+configFile="/etc/default/ota-agent"
+
+if [ -f "${configFile}" ]; then
+    # shellcheck disable=SC1090
+    . "${configFile}"
+fi
+
+startAgent() {
+    [ -x "${agentBinary}" ] || {
+        printf '错误：找不到可执行文件 %s\n' "${agentBinary}" >&2
+        return 1
+    }
+    start-stop-daemon --start --quiet --background --make-pidfile \
+        --pidfile "${pidFile}" --exec "${agentBinary}"
+    printf '已启动 %s\n' "${agentName}"
+}
+
+stopAgent() {
+    start-stop-daemon --stop --quiet --oknodo --pidfile "${pidFile}" --retry 5
+    rm -f "${pidFile}"
+    printf '已停止 %s\n' "${agentName}"
+}
+
+showStatus() {
+    if [ -f "${pidFile}" ] && kill -0 "$(cat "${pidFile}")" 2>/dev/null; then
+        printf '%s 正在运行\n' "${agentName}"
+        return 0
+    fi
+    printf '%s 未运行\n' "${agentName}"
+    return 3
+}
+
+case "${1:-}" in
+    start)
+        startAgent
+        ;;
+    stop)
+        stopAgent
+        ;;
+    restart)
+        stopAgent
+        startAgent
+        ;;
+    status)
+        showStatus
+        ;;
+    *)
+        printf '用法: %s {start|stop|restart|status}\n' "$0" >&2
+        exit 1
+        ;;
+esac

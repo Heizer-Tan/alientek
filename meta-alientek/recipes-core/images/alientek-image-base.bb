@@ -20,6 +20,7 @@ CORE_IMAGE_EXTRA_INSTALL += " \
     board-network \
     board-web \
     board-update-tools \
+    ota-agent \
     swupdate \
     sqlite3 \
     board-ntpdate \
