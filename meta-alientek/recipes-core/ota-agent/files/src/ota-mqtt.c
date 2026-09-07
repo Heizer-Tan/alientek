@@ -11,6 +11,15 @@ typedef struct JsonBuilder {
     size_t length;
 } JsonBuilder;
 
+enum CommandField {
+    FIELD_REQUEST_ID = 1U << 0,
+    FIELD_VERSION = 1U << 1,
+    FIELD_URL = 1U << 2,
+    FIELD_SHA256 = 1U << 3,
+    FIELD_AUTO_REBOOT = 1U << 4,
+    FIELD_ALL = (1U << 5) - 1
+};
+
 static const unsigned char *skipJsonSpace(const unsigned char *cursor)
 {
     while (isspace(*cursor)) {
@@ -19,126 +28,147 @@ static const unsigned char *skipJsonSpace(const unsigned char *cursor)
     return cursor;
 }
 
-static int updateJsonStringState(unsigned char character, int *inString,
-                                 int *escaped)
+static int failWithErrno(int errorNumber)
 {
-    if (character < 0x20) {
-        return 0;
-    }
-    if (*escaped) {
-        *escaped = 0;
-    } else if (character == '\\') {
-        *escaped = 1;
-    } else if (character == '"') {
-        *inString = 0;
-    }
-    return 1;
+    errno = errorNumber;
+    return -1;
 }
 
-static int hasStrictObjectBoundary(const char *jsonText)
+static int parseJsonString(const unsigned char **cursor, char *output,
+                           size_t outputSize)
+{
+    size_t length = 0;
+
+    if (**cursor != '"' || outputSize == 0) {
+        return failWithErrno(EBADMSG);
+    }
+    ++*cursor;
+    while (**cursor != '\0' && **cursor != '"') {
+        if (**cursor == '\\' || **cursor < 0x20) {
+            return failWithErrno(EBADMSG);
+        }
+        if (length + 1 >= outputSize) {
+            return failWithErrno(EOVERFLOW);
+        }
+        output[length++] = (char)*(*cursor)++;
+    }
+    if (**cursor != '"') {
+        return failWithErrno(EBADMSG);
+    }
+    if (length == 0) {
+        return failWithErrno(EINVAL);
+    }
+    output[length] = '\0';
+    ++*cursor;
+    return 0;
+}
+
+static int parseJsonBoolean(const unsigned char **cursor, int *value)
+{
+    if (strncmp((const char *)*cursor, "true", 4) == 0) {
+        *cursor += 4;
+        *value = 1;
+        return 0;
+    }
+    if (strncmp((const char *)*cursor, "false", 5) == 0) {
+        *cursor += 5;
+        *value = 0;
+        return 0;
+    }
+    return failWithErrno(EBADMSG);
+}
+
+static int parseCommandStringField(const char *key,
+                                   const unsigned char **cursor,
+                                   OtaState *state, OtaMqttCommand *command)
+{
+    if (strcmp(key, "requestId") == 0) {
+        return parseJsonString(cursor, state->requestId,
+                               sizeof(state->requestId));
+    }
+    if (strcmp(key, "version") == 0) {
+        return parseJsonString(cursor, state->version, sizeof(state->version));
+    }
+    if (strcmp(key, "url") == 0) {
+        return parseJsonString(cursor, command->url, sizeof(command->url));
+    }
+    return parseJsonString(cursor, command->sha256, sizeof(command->sha256));
+}
+
+static unsigned int commandFieldForKey(const char *key)
+{
+    static const char *const keys[] = {
+        "requestId", "version", "url", "sha256", "autoReboot"
+    };
+    unsigned int index;
+
+    for (index = 0; index < sizeof(keys) / sizeof(keys[0]); ++index) {
+        if (strcmp(key, keys[index]) == 0) {
+            return 1U << index;
+        }
+    }
+    return 0;
+}
+
+static int parseCommandMember(const unsigned char **cursor,
+                              OtaState *state, OtaMqttCommand *command,
+                              unsigned int *fields)
+{
+    char key[32];
+    unsigned int field;
+
+    if (parseJsonString(cursor, key, sizeof(key)) != 0) {
+        return -1;
+    }
+    *cursor = skipJsonSpace(*cursor);
+    if (*(*cursor)++ != ':') {
+        return failWithErrno(EBADMSG);
+    }
+    *cursor = skipJsonSpace(*cursor);
+    field = commandFieldForKey(key);
+    if (field == 0) {
+        return failWithErrno(EBADMSG);
+    }
+    if ((*fields & field) != 0) {
+        return failWithErrno(EEXIST);
+    }
+    *fields |= field;
+    if (field == FIELD_AUTO_REBOOT) {
+        return parseJsonBoolean(cursor, &state->autoReboot);
+    }
+    return parseCommandStringField(key, cursor, state, command);
+}
+
+static int parseCommandObject(const char *jsonText, OtaState *state,
+                              OtaMqttCommand *command)
 {
     const unsigned char *cursor =
         skipJsonSpace((const unsigned char *)jsonText);
-    int depth = 0;
-    int inString = 0;
-    int escaped = 0;
+    unsigned int fields = 0;
 
-    if (*cursor != '{') {
-        return 0;
+    if (*cursor++ != '{') {
+        return failWithErrno(EBADMSG);
     }
-    for (; *cursor != '\0'; ++cursor) {
-        if (inString) {
-            if (!updateJsonStringState(*cursor, &inString, &escaped)) {
-                return 0;
-            }
-            continue;
+    for (;;) {
+        cursor = skipJsonSpace(cursor);
+        if (*cursor == '}') {
+            return failWithErrno(ENOMSG);
         }
-        if (*cursor == '"') {
-            inString = 1;
-        } else if (*cursor == '{') {
-            ++depth;
-        } else if (*cursor == '}' && --depth == 0) {
-            cursor = skipJsonSpace(cursor + 1);
-            return *cursor == '\0';
-        }
-    }
-    return 0;
-}
-
-static const char *findJsonValue(const char *jsonText, const char *key)
-{
-    char pattern[64];
-    const char *cursor;
-
-    if (snprintf(pattern, sizeof(pattern), "\"%s\"", key) < 0) {
-        return NULL;
-    }
-    cursor = strstr(jsonText, pattern);
-    if (cursor == NULL) {
-        return NULL;
-    }
-    cursor += strlen(pattern);
-    while (isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-    if (*cursor++ != ':') {
-        return NULL;
-    }
-    while (isspace((unsigned char)*cursor)) {
-        ++cursor;
-    }
-    return cursor;
-}
-
-static int readJsonString(const char *jsonText, const char *key,
-                          char *output, size_t outputSize)
-{
-    const char *cursor = findJsonValue(jsonText, key);
-    size_t length = 0;
-
-    if (cursor == NULL || *cursor++ != '"' || outputSize == 0) {
-        errno = EINVAL;
-        return -1;
-    }
-    while (*cursor != '\0' && *cursor != '"') {
-        if (*cursor == '\\' || (unsigned char)*cursor < 0x20 ||
-            length + 1 >= outputSize) {
-            errno = EINVAL;
+        if (parseCommandMember(&cursor, state, command, &fields) != 0) {
             return -1;
         }
-        output[length++] = *cursor++;
+        cursor = skipJsonSpace(cursor);
+        if (*cursor == '}') {
+            cursor = skipJsonSpace(cursor + 1);
+            if (*cursor != '\0') {
+                return failWithErrno(EBADMSG);
+            }
+            return fields == FIELD_ALL ? 0 : failWithErrno(ENOMSG);
+        }
+        if (*cursor++ != ',' || *skipJsonSpace(cursor) == '}') {
+            return failWithErrno(EBADMSG);
+        }
     }
-    if (*cursor != '"' || length == 0) {
-        errno = EINVAL;
-        return -1;
-    }
-    output[length] = '\0';
-    return 0;
-}
-
-static int readJsonBoolean(const char *jsonText, const char *key, int *value)
-{
-    const char *cursor = findJsonValue(jsonText, key);
-    const char *end;
-
-    if (cursor != NULL && strncmp(cursor, "true", 4) == 0) {
-        end = cursor + 4;
-        *value = 1;
-    } else if (cursor != NULL && strncmp(cursor, "false", 5) == 0) {
-        end = cursor + 5;
-        *value = 0;
-    } else {
-        errno = EINVAL;
-        return -1;
-    }
-    while (isspace((unsigned char)*end)) {
-        ++end;
-    }
-    if (*end == ',' || *end == '}') {
-        return 0;
-    }
-    errno = EINVAL;
-    return -1;
 }
 
 static int isValidSha256(const char *sha256)
@@ -173,19 +203,13 @@ int otaMqttParseCommandJson(const char *jsonText, OtaState *state,
     OtaState parsedState = {0};
     OtaMqttCommand parsedCommand = {0};
 
-    if (jsonText == NULL || state == NULL || command == NULL ||
-        !hasStrictObjectBoundary(jsonText) ||
-        readJsonString(jsonText, "requestId", parsedState.requestId,
-                       sizeof(parsedState.requestId)) != 0 ||
-        readJsonString(jsonText, "version", parsedState.version,
-                       sizeof(parsedState.version)) != 0 ||
-        readJsonString(jsonText, "url", parsedCommand.url,
-                       sizeof(parsedCommand.url)) != 0 ||
-        readJsonString(jsonText, "sha256", parsedCommand.sha256,
-                       sizeof(parsedCommand.sha256)) != 0 ||
-        readJsonBoolean(jsonText, "autoReboot", &parsedState.autoReboot) != 0 ||
-        validateCommand(&parsedCommand) != 0) {
-        errno = EINVAL;
+    if (jsonText == NULL || state == NULL || command == NULL) {
+        return failWithErrno(EINVAL);
+    }
+    if (parseCommandObject(jsonText, &parsedState, &parsedCommand) != 0) {
+        return -1;
+    }
+    if (validateCommand(&parsedCommand) != 0) {
         return -1;
     }
     *state = parsedState;

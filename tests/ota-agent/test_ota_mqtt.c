@@ -36,7 +36,7 @@ static void testRejectsTrailingGarbage(void)
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
-    assert(errno == EINVAL);
+    assert(errno == EBADMSG);
 }
 
 static void testMissingField(void)
@@ -49,7 +49,7 @@ static void testMissingField(void)
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
-    assert(errno == EINVAL);
+    assert(errno == ENOMSG);
 }
 
 static void testInvalidSha256Length(void)
@@ -76,7 +76,63 @@ static void testInvalidBooleanToken(void)
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
-    assert(errno == EINVAL);
+    assert(errno == EBADMSG);
+}
+
+static void testRejectsTrailingComma(void)
+{
+    const char *jsonText =
+        "{\"requestId\":\"req-42\",\"version\":\"2.0.1\","
+        "\"url\":\"https://example.com/update.swu\","
+        "\"sha256\":\"0123456789abcdef0123456789abcdef"
+        "0123456789abcdef0123456789abcdef\",\"autoReboot\":true,}";
+    OtaState state = {0};
+
+    errno = 0;
+    assert(otaHandleCommandJson(jsonText, &state) == -1);
+    assert(errno == EBADMSG);
+}
+
+static void testRejectsMissingComma(void)
+{
+    const char *jsonText =
+        "{\"requestId\":\"req-42\" \"version\":\"2.0.1\","
+        "\"url\":\"https://example.com/update.swu\","
+        "\"sha256\":\"0123456789abcdef0123456789abcdef"
+        "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
+    OtaState state = {0};
+
+    errno = 0;
+    assert(otaHandleCommandJson(jsonText, &state) == -1);
+    assert(errno == EBADMSG);
+}
+
+static void testRejectsRequiredFieldInNestedObject(void)
+{
+    const char *jsonText =
+        "{\"metadata\":{\"requestId\":\"req-42\"},\"version\":\"2.0.1\","
+        "\"url\":\"https://example.com/update.swu\","
+        "\"sha256\":\"0123456789abcdef0123456789abcdef"
+        "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
+    OtaState state = {0};
+
+    errno = 0;
+    assert(otaHandleCommandJson(jsonText, &state) == -1);
+    assert(errno == EBADMSG);
+}
+
+static void testRejectsRepeatedField(void)
+{
+    const char *jsonText =
+        "{\"requestId\":\"req-42\",\"requestId\":\"req-43\","
+        "\"version\":\"2.0.1\",\"url\":\"https://example.com/update.swu\","
+        "\"sha256\":\"0123456789abcdef0123456789abcdef"
+        "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
+    OtaState state = {0};
+
+    errno = 0;
+    assert(otaHandleCommandJson(jsonText, &state) == -1);
+    assert(errno == EEXIST);
 }
 
 static void testStatusPayload(void)
@@ -137,6 +193,10 @@ int main(void)
     testMissingField();
     testInvalidSha256Length();
     testInvalidBooleanToken();
+    testRejectsRepeatedField();
+    testRejectsRequiredFieldInNestedObject();
+    testRejectsMissingComma();
+    testRejectsTrailingComma();
     testStatusPayload();
     testStatusPayloadEscapesAllControlCharacters();
     testRejectsTrailingGarbage();
