@@ -13,6 +13,8 @@ SRC_URI = " \
     file://src/ota-download.h \
     file://src/ota-exec.c \
     file://src/ota-exec.h \
+    file://src/ota-mqtt.c \
+    file://src/ota-mqtt.h \
     file://src/Makefile \
     file://ota-agent.init \
     file://ota-agent.default \

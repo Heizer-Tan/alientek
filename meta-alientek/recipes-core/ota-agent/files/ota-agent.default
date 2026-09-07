@@ -1,2 +1,6 @@
 # ota-agent 默认配置
-# MQTT、下载和恢复参数将在对应功能接入后加入。
+export OTA_MQTT_HOST="${OTA_MQTT_HOST:-127.0.0.1}"
+export OTA_MQTT_PORT="${OTA_MQTT_PORT:-1883}"
+export OTA_MQTT_CLIENT_ID="${OTA_MQTT_CLIENT_ID:-ota-agent}"
+export OTA_MQTT_COMMAND_TOPIC="${OTA_MQTT_COMMAND_TOPIC:-device/ota/command}"
+export OTA_MQTT_STATUS_TOPIC="${OTA_MQTT_STATUS_TOPIC:-device/ota/status}"
