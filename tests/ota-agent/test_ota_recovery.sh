@@ -18,6 +18,12 @@ cat >"${mockBin}/fw_printenv" <<'EOF'
 #!/bin/sh
 set -eu
 test "$1" = "-n"
+if [ "$2" = "active_slot" ] &&
+    [ -n "${MOCK_FAIL_ACTIVE_ONCE_FILE:-}" ] &&
+    [ ! -e "${MOCK_FAIL_ACTIVE_ONCE_FILE}" ]; then
+    : >"${MOCK_FAIL_ACTIVE_ONCE_FILE}"
+    exit 2
+fi
 case "$2" in
     active_slot) printf '%s\n' "${MOCK_ACTIVE_SLOT}" ;;
     last_good_slot) printf '%s\n' "${MOCK_LAST_GOOD_SLOT}" ;;
@@ -119,6 +125,18 @@ static void testPendingCommitIsDeferred(const char *cmdlinePath)
     assert(errno == EAGAIN);
 }
 
+static void testCommitIntermediateStateIsDeferred(const char *cmdlinePath)
+{
+    OtaState state = createPendingState();
+
+    writeCmdline(cmdlinePath, "/dev/mmcblk0p3");
+    setMockEnvironment("B", "A", "0");
+    errno = 0;
+    assert(otaRecoverPendingState(&state) == -1);
+    assert(errno == EAGAIN);
+    assert(strcmp(state.phase, "upgrading") == 0);
+}
+
 int main(int argc, char **argv)
 {
     assert(argc == 2);
@@ -126,6 +144,7 @@ int main(int argc, char **argv)
     testCommittedRecovery(argv[1]);
     testRollbackRecovery(argv[1]);
     testPendingCommitIsDeferred(argv[1]);
+    testCommitIntermediateStateIsDeferred(argv[1]);
     puts("ota recovery tests passed");
     return 0;
 }
@@ -189,14 +208,17 @@ PATH="${mockBin}:${PATH}" \
     MOCK_ACTIVE_SLOT="B" \
     MOCK_LAST_GOOD_SLOT="B" \
     MOCK_UPGRADE_AVAILABLE="0" \
+    MOCK_FAIL_ACTIVE_ONCE_FILE="${tempDir}/active-read-failed" \
     BOARD_CMDLINE_FILE="${tempDir}/cmdline" \
     OTA_AGENT_STATE_FILE="${tempDir}/state.json" \
     OTA_AGENT_LOCK_FILE="${tempDir}/ota-agent.lock" \
-    timeout 1 stdbuf -o0 -e0 "${agentBinary}" \
+    timeout 3 stdbuf -o0 -e0 "${agentBinary}" \
     >"${tempDir}/startup.out" 2>"${tempDir}/startup.err"
 startupStatus="$?"
 set -e
 test "${startupStatus}" -eq 124
+test -e "${tempDir}/active-read-failed"
+grep -q '判定 OTA 恢复结果失败' "${tempDir}/startup.err"
 grep -q '"requestId":"req-startup"' "${tempDir}/startup.out"
 grep -q '"phase":"committed"' "${tempDir}/startup.out"
 grep -Eq '"phase":[[:space:]]*"committed"' "${tempDir}/state.json"

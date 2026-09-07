@@ -335,15 +335,15 @@ int otaRecoverPendingState(OtaState *state)
     }
     if (strcmp(currentSlot, state->targetSlot) == 0 &&
         strcmp(activeSlot, state->targetSlot) == 0 &&
-        strcmp(upgradeAvailable, "1") == 0) {
-        errno = EAGAIN;
-        return -1;
-    }
-    if (strcmp(currentSlot, state->targetSlot) == 0 &&
-        strcmp(activeSlot, state->targetSlot) == 0 &&
         strcmp(lastGoodSlot, state->targetSlot) == 0 &&
         strcmp(upgradeAvailable, "0") == 0) {
         return otaStateSetResult(state, "committed", "success", "升级已提交");
+    }
+    if (strcmp(currentSlot, state->targetSlot) == 0 &&
+        strcmp(activeSlot, state->targetSlot) == 0) {
+        /* 提交脚本分步写环境时，等待 last_good_slot 与标志状态一致。 */
+        errno = EAGAIN;
+        return -1;
     }
     return otaStateSetResult(state, "failed", "error",
                              "升级后未运行在目标槽位");
