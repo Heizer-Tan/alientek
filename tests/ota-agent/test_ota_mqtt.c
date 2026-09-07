@@ -13,11 +13,30 @@ static void testValidCommand(void)
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
     OtaState state = {0};
+    OtaMqttCommand command = {0};
 
-    assert(otaHandleCommandJson(jsonText, &state) == 0);
+    assert(otaMqttParseCommandJson(jsonText, &state, &command) == 0);
     assert(strcmp(state.requestId, "req-42") == 0);
     assert(strcmp(state.version, "2.0.1") == 0);
+    assert(strcmp(command.url, "https://example.com/update.swu") == 0);
+    assert(strcmp(command.sha256,
+                  "0123456789abcdef0123456789abcdef"
+                  "0123456789abcdef0123456789abcdef") == 0);
     assert(state.autoReboot == 1);
+}
+
+static void testRejectsTrailingGarbage(void)
+{
+    const char *jsonText =
+        "{\"requestId\":\"req-42\",\"version\":\"2.0.1\","
+        "\"url\":\"https://example.com/update.swu\","
+        "\"sha256\":\"0123456789abcdef0123456789abcdef"
+        "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}garbage";
+    OtaState state = {0};
+
+    errno = 0;
+    assert(otaHandleCommandJson(jsonText, &state) == -1);
+    assert(errno == EINVAL);
 }
 
 static void testMissingField(void)
@@ -76,6 +95,42 @@ static void testStatusPayload(void)
     assert(strstr(payload, "\"detail\":\"校验\\\"\\r\\t中\"") != NULL);
 }
 
+static void assertControlCharacterEscaped(unsigned char control,
+                                          const char *payload)
+{
+    char expected[7];
+
+    if (control == '\n') {
+        assert(strstr(payload, "\\n") != NULL);
+    } else if (control == '\r') {
+        assert(strstr(payload, "\\r") != NULL);
+    } else if (control == '\t') {
+        assert(strstr(payload, "\\t") != NULL);
+    } else {
+        (void)snprintf(expected, sizeof(expected), "\\u%04x", control);
+        assert(strstr(payload, expected) != NULL);
+    }
+}
+
+static void testStatusPayloadEscapesAllControlCharacters(void)
+{
+    OtaState nulState = {0};
+    char nulPayload[512];
+    unsigned char control;
+
+    assert(otaMqttBuildStatusPayload(&nulState, nulPayload,
+                                     sizeof(nulPayload)) == 0);
+    assert(strstr(nulPayload, "\"detail\":\"\"") != NULL);
+    for (control = 1; control <= 0x1f; ++control) {
+        OtaState state = {0};
+        char payload[512];
+
+        state.detail[0] = (char)control;
+        assert(otaMqttBuildStatusPayload(&state, payload, sizeof(payload)) == 0);
+        assertControlCharacterEscaped(control, payload);
+    }
+}
+
 int main(void)
 {
     testValidCommand();
@@ -83,6 +138,8 @@ int main(void)
     testInvalidSha256Length();
     testInvalidBooleanToken();
     testStatusPayload();
+    testStatusPayloadEscapesAllControlCharacters();
+    testRejectsTrailingGarbage();
     puts("ota mqtt tests passed");
     return 0;
 }

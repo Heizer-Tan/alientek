@@ -11,6 +11,60 @@ typedef struct JsonBuilder {
     size_t length;
 } JsonBuilder;
 
+static const unsigned char *skipJsonSpace(const unsigned char *cursor)
+{
+    while (isspace(*cursor)) {
+        ++cursor;
+    }
+    return cursor;
+}
+
+static int updateJsonStringState(unsigned char character, int *inString,
+                                 int *escaped)
+{
+    if (character < 0x20) {
+        return 0;
+    }
+    if (*escaped) {
+        *escaped = 0;
+    } else if (character == '\\') {
+        *escaped = 1;
+    } else if (character == '"') {
+        *inString = 0;
+    }
+    return 1;
+}
+
+static int hasStrictObjectBoundary(const char *jsonText)
+{
+    const unsigned char *cursor =
+        skipJsonSpace((const unsigned char *)jsonText);
+    int depth = 0;
+    int inString = 0;
+    int escaped = 0;
+
+    if (*cursor != '{') {
+        return 0;
+    }
+    for (; *cursor != '\0'; ++cursor) {
+        if (inString) {
+            if (!updateJsonStringState(*cursor, &inString, &escaped)) {
+                return 0;
+            }
+            continue;
+        }
+        if (*cursor == '"') {
+            inString = 1;
+        } else if (*cursor == '{') {
+            ++depth;
+        } else if (*cursor == '}' && --depth == 0) {
+            cursor = skipJsonSpace(cursor + 1);
+            return *cursor == '\0';
+        }
+    }
+    return 0;
+}
+
 static const char *findJsonValue(const char *jsonText, const char *key)
 {
     char pattern[64];
@@ -120,6 +174,7 @@ int otaMqttParseCommandJson(const char *jsonText, OtaState *state,
     OtaMqttCommand parsedCommand = {0};
 
     if (jsonText == NULL || state == NULL || command == NULL ||
+        !hasStrictObjectBoundary(jsonText) ||
         readJsonString(jsonText, "requestId", parsedState.requestId,
                        sizeof(parsedState.requestId)) != 0 ||
         readJsonString(jsonText, "version", parsedState.version,
@@ -159,6 +214,19 @@ static int appendText(JsonBuilder *builder, const char *text)
     return 0;
 }
 
+static int appendControlCharacter(JsonBuilder *builder,
+                                  unsigned char character)
+{
+    char escaped[7];
+    int length = snprintf(escaped, sizeof(escaped), "\\u%04x", character);
+
+    if (length != 6) {
+        errno = EINVAL;
+        return -1;
+    }
+    return appendText(builder, escaped);
+}
+
 static int appendEscaped(JsonBuilder *builder, const char *text)
 {
     for (; *text != '\0'; ++text) {
@@ -176,7 +244,12 @@ static int appendEscaped(JsonBuilder *builder, const char *text)
         } else if (*text == '\t') {
             escaped = "\\t";
         }
-        if (appendText(builder, escaped != NULL ? escaped : character) != 0) {
+        if ((unsigned char)*text < 0x20 && escaped == NULL) {
+            if (appendControlCharacter(builder, (unsigned char)*text) != 0) {
+                return -1;
+            }
+        } else if (appendText(builder,
+                              escaped != NULL ? escaped : character) != 0) {
             return -1;
         }
     }
