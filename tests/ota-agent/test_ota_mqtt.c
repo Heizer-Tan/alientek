@@ -39,6 +39,20 @@ static void testValidEscapedSlashUrl(void)
     assert(strcmp(command.url, "https://example.com/update.swu") == 0);
 }
 
+static void testRejectsInvalidUtf8InCommandString(void)
+{
+    const char jsonText[] =
+        "{\"requestId\":\"req-\x80\",\"version\":\"2.0.1\","
+        "\"url\":\"https://example.com/update.swu\","
+        "\"sha256\":\"0123456789abcdef0123456789abcdef"
+        "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
+    OtaState state = {0};
+
+    errno = 0;
+    assert(otaHandleCommandJson(jsonText, &state) == -1);
+    assert(errno == EBADMSG);
+}
+
 static void testRejectsVerticalTabWhitespace(void)
 {
     const char *jsonText =
@@ -215,9 +229,23 @@ static void testStatusPayloadEscapesAllControlCharacters(void)
     }
 }
 
+static void testStatusPayloadRejectsInvalidUtf8(void)
+{
+    OtaState state = {0};
+    char payload[512];
+
+    state.detail[0] = (char)0x80;
+    errno = 0;
+    assert(otaMqttBuildStatusPayload(&state, payload, sizeof(payload)) == -1);
+    assert(errno == EBADMSG);
+    assert(payload[0] == '\0');
+}
+
 int main(void)
 {
+    testStatusPayloadRejectsInvalidUtf8();
     testValidCommand();
+    testRejectsInvalidUtf8InCommandString();
     testRejectsVerticalTabWhitespace();
     testValidEscapedSlashUrl();
     testMissingField();

@@ -133,6 +133,75 @@ static int appendUtf8(unsigned int scalar, char *output, size_t outputSize,
     return 0;
 }
 
+static int isUtf8Continuation(unsigned char character)
+{
+    return character >= 0x80 && character <= 0xbf;
+}
+
+static int isValidUtf8ThreeByte(const unsigned char *text)
+{
+    return text[1] != '\0' && isUtf8Continuation(text[2]) &&
+           ((text[0] == 0xe0 && text[1] >= 0xa0 && text[1] <= 0xbf) ||
+            (text[0] == 0xed && text[1] >= 0x80 && text[1] <= 0x9f) ||
+            (((text[0] >= 0xe1 && text[0] <= 0xec) ||
+              (text[0] >= 0xee && text[0] <= 0xef)) &&
+             isUtf8Continuation(text[1])));
+}
+
+static int isValidUtf8FourByte(const unsigned char *text)
+{
+    int validSecond =
+        (text[0] == 0xf0 && text[1] >= 0x90 && text[1] <= 0xbf) ||
+        (text[0] == 0xf4 && text[1] >= 0x80 && text[1] <= 0x8f) ||
+        (text[0] >= 0xf1 && text[0] <= 0xf3 &&
+         isUtf8Continuation(text[1]));
+
+    return text[1] != '\0' && text[2] != '\0' && validSecond &&
+           isUtf8Continuation(text[2]) && isUtf8Continuation(text[3]);
+}
+
+static int utf8SequenceLength(const unsigned char *text, size_t *length)
+{
+    unsigned char first = text[0];
+
+    if (first <= 0x7f) {
+        *length = 1;
+        return 0;
+    }
+    if (first >= 0xc2 && first <= 0xdf &&
+        isUtf8Continuation(text[1])) {
+        *length = 2;
+        return 0;
+    }
+    /* 同时拒绝过长编码、代理项及超出 U+10FFFF 的码点。 */
+    if (first >= 0xe0 && first <= 0xef && isValidUtf8ThreeByte(text)) {
+        *length = 3;
+        return 0;
+    }
+    if (first >= 0xf0 && first <= 0xf4 && isValidUtf8FourByte(text)) {
+        *length = 4;
+        return 0;
+    }
+    return failWithErrno(EBADMSG);
+}
+
+static int appendRawUtf8(const unsigned char **cursor, char *output,
+                         size_t outputSize, size_t *length)
+{
+    size_t sequenceLength;
+
+    if (utf8SequenceLength(*cursor, &sequenceLength) != 0) {
+        return -1;
+    }
+    if (*length + sequenceLength >= outputSize) {
+        return failWithErrno(EOVERFLOW);
+    }
+    memcpy(output + *length, *cursor, sequenceLength);
+    *length += sequenceLength;
+    *cursor += sequenceLength;
+    return 0;
+}
+
 static int parseJsonEscape(const unsigned char **cursor, char *output,
                            size_t outputSize, size_t *length)
 {
@@ -175,6 +244,12 @@ static int parseJsonString(const unsigned char **cursor, char *output,
         }
         if (**cursor == '\\') {
             if (parseJsonEscape(cursor, output, outputSize, &length) != 0) {
+                return -1;
+            }
+            continue;
+        }
+        if (**cursor >= 0x80) {
+            if (appendRawUtf8(cursor, output, outputSize, &length) != 0) {
                 return -1;
             }
             continue;
@@ -383,6 +458,21 @@ static int appendControlCharacter(JsonBuilder *builder,
     return appendText(builder, escaped);
 }
 
+static int validateUtf8Text(const char *text)
+{
+    const unsigned char *cursor = (const unsigned char *)text;
+
+    while (*cursor != '\0') {
+        size_t sequenceLength;
+
+        if (utf8SequenceLength(cursor, &sequenceLength) != 0) {
+            return -1;
+        }
+        cursor += sequenceLength;
+    }
+    return 0;
+}
+
 static int appendEscaped(JsonBuilder *builder, const char *text)
 {
     for (; *text != '\0'; ++text) {
@@ -412,6 +502,16 @@ static int appendEscaped(JsonBuilder *builder, const char *text)
     return 0;
 }
 
+static int validateStatusUtf8(const OtaState *state)
+{
+    return validateUtf8Text(state->requestId) == 0 &&
+           validateUtf8Text(state->phase) == 0 &&
+           validateUtf8Text(state->result) == 0 &&
+           validateUtf8Text(state->detail) == 0
+               ? 0
+               : -1;
+}
+
 static int appendStatusField(JsonBuilder *builder, const char *key,
                              const char *value, const char *suffix)
 {
@@ -436,6 +536,9 @@ int otaMqttBuildStatusPayload(const OtaState *state, char *payload,
         return -1;
     }
     payload[0] = '\0';
+    if (validateStatusUtf8(state) != 0) {
+        return -1;
+    }
     if (appendText(&builder, "{") != 0 ||
         appendStatusField(&builder, "requestId", state->requestId, "\",") != 0 ||
         appendStatusField(&builder, "phase", state->phase, "\",") != 0 ||
