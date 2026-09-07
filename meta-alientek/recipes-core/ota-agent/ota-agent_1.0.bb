@@ -9,6 +9,10 @@ SRC_URI = " \
     file://src/ota-agent.h \
     file://src/ota-state.c \
     file://src/ota-state.h \
+    file://src/ota-download.c \
+    file://src/ota-download.h \
+    file://src/ota-exec.c \
+    file://src/ota-exec.h \
     file://src/Makefile \
     file://ota-agent.init \
     file://ota-agent.default \
@@ -29,6 +33,8 @@ do_install() {
     install -d "${D}${bindir}"
     install -m 0755 "${S}/ota-agent" "${D}${bindir}/ota-agent"
 
+    install -d "${D}${localstatedir}/lib/ota-agent"
+
     install -d "${D}${sysconfdir}/init.d"
     install -m 0755 "${WORKDIR}/ota-agent.init" \
         "${D}${sysconfdir}/init.d/ota-agent"
@@ -41,4 +47,5 @@ do_install() {
 FILES:${PN} += " \
     ${sysconfdir}/default/ota-agent \
     ${sysconfdir}/init.d/ota-agent \
+    ${localstatedir}/lib/ota-agent \
 "
