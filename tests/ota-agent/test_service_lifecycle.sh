@@ -30,6 +30,7 @@ make -C "${sourceDir}" \
 runService() {
     OTA_AGENT_BINARY="${agentBinary}" \
         OTA_AGENT_PID_FILE="${pidFile}" \
+        OTA_AGENT_LOCK_FILE="${tempDir}/ota-agent.lock" \
         OTA_AGENT_CONFIG_FILE="${tempDir}/missing-default" \
         sh "${initScript}" "$1"
 }

@@ -7,6 +7,8 @@ RDEPENDS:${PN} = "curl coreutils board-update-tools"
 SRC_URI = " \
     file://src/ota-agent.c \
     file://src/ota-agent.h \
+    file://src/ota-state.c \
+    file://src/ota-state.h \
     file://src/Makefile \
     file://ota-agent.init \
     file://ota-agent.default \
