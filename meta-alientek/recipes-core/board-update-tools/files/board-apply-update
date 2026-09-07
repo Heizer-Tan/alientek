@@ -2,8 +2,33 @@
 
 set -eu
 
+CMDLINE_FILE="${BOARD_CMDLINE_FILE:-/proc/cmdline}"
+
 readActiveSlot() {
     fw_printenv -n active_slot 2>/dev/null || printf '%s\n' "A"
+}
+
+readUpgradeAvailable() {
+    fw_printenv -n upgrade_available 2>/dev/null || printf '%s\n' "0"
+}
+
+readCurrentSlot() {
+    if grep -Eq '(^| )root=/dev/mmcblk0p2( |$)' "${CMDLINE_FILE}"; then
+        printf '%s\n' "A"
+        return 0
+    fi
+
+    if grep -Eq '(^| )root=/dev/mmcblk0p3( |$)' "${CMDLINE_FILE}"; then
+        printf '%s\n' "B"
+        return 0
+    fi
+
+    if grep -Eq '(^| )root=/dev/nfs( |$)' "${CMDLINE_FILE}"; then
+        printf '%s\n' "NFS"
+        return 0
+    fi
+
+    printf '%s\n' "UNKNOWN"
 }
 
 selectTargetSlot() {
@@ -37,21 +62,79 @@ requireFile() {
     fi
 }
 
-main() {
-    if [ "$#" -ne 1 ]; then
-        printf '用法: %s <update.swu>\n' "$0" >&2
+requireSafeUpgradeState() {
+    upgradeAvailable="$(readUpgradeAvailable)"
+    activeSlot="$(readActiveSlot)"
+    currentSlot="$(readCurrentSlot)"
+
+    if [ "${upgradeAvailable}" = "1" ]; then
+        printf '检测到上次升级尚未完成提交，请先重启并确认新槽位启动成功后再继续升级\n' >&2
         exit 1
     fi
 
-    requireFile "$1"
+    case "${currentSlot}" in
+        A|B)
+            if [ "${currentSlot}" != "${activeSlot}" ]; then
+                printf '当前实际启动槽位=%s，但环境 active_slot=%s；这通常表示升级后尚未重启，已拒绝继续升级\n' \
+                    "${currentSlot}" "${activeSlot}" >&2
+                exit 1
+            fi
+            ;;
+        NFS)
+            printf '当前系统运行在 NFS 根文件系统上，继续按 active_slot=%s 选择目标槽位\n' "${activeSlot}"
+            ;;
+        *)
+            printf '无法从 %s 判断当前启动槽位，已拒绝继续升级\n' "${CMDLINE_FILE}" >&2
+            exit 1
+            ;;
+    esac
+}
+
+parseArgs() {
+    autoReboot="0"
+
+    case "$#" in
+        1)
+            swuPath="$1"
+            ;;
+        2)
+            if [ "$1" != "--reboot" ]; then
+                printf '未知参数: %s\n' "$1" >&2
+                exit 1
+            fi
+            autoReboot="1"
+            swuPath="$2"
+            ;;
+        *)
+            printf '用法: %s [--reboot] <update.swu>\n' "$0" >&2
+            exit 1
+            ;;
+    esac
+}
+
+performRebootIfRequested() {
+    if [ "${autoReboot}" != "1" ]; then
+        return 0
+    fi
+
+    printf '即将自动重启以切换到新槽位\n'
+    sync
+    reboot
+}
+
+main() {
+    parseArgs "$@"
+    requireFile "${swuPath}"
+    requireSafeUpgradeState
     targetSlot="$(selectTargetSlot)"
     mode="$(selectSwuMode)"
     printf '当前槽位: %s，目标槽位: %s，执行模式: %s\n' "$(readActiveSlot)" "${targetSlot}" "${mode}"
-    swupdate -v -i "$1" -e "${mode}"
+    swupdate -v -i "${swuPath}" -e "${mode}"
     fw_setenv active_slot "${targetSlot}"
     fw_setenv upgrade_available 1
     fw_setenv bootcount 0
     printf '升级完成，已切换活动槽位到 %s\n' "${targetSlot}"
+    performRebootIfRequested
 }
 
 main "$@"
