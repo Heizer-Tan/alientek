@@ -44,8 +44,11 @@ cat >"${mockBin}/fw_printenv" <<'EOF'
 #!/bin/sh
 set -eu
 test "$1" = "-n"
-test "$2" = "upgrade_available"
-printf '%s\n' "${MOCK_UPGRADE_AVAILABLE}"
+case "$2" in
+    active_slot) printf '%s\n' "${MOCK_ACTIVE_SLOT}" ;;
+    upgrade_available) printf '%s\n' "${MOCK_UPGRADE_AVAILABLE}" ;;
+    *) exit 2 ;;
+esac
 EOF
 
 cat >"${mockBin}/board-apply-update" <<'EOF'
@@ -64,6 +67,7 @@ runAgent() {
         MOCK_CURL_LOG="${tempDir}/curl.log" \
         MOCK_UPGRADE_LOG="${tempDir}/upgrade.log" \
         MOCK_UPGRADE_AVAILABLE="$1" \
+        MOCK_ACTIVE_SLOT="A" \
         OTA_AGENT_LOCK_FILE="${tempDir}/ota-agent.lock" \
         OTA_AGENT_STATE_FILE="${tempDir}/state.json" \
         PATH="${mockBin}:${PATH}" \
@@ -107,6 +111,7 @@ EOF
 printf 'NAME=Test\nVERSION_ID="3.2.1"\n' >"${tempDir}/os-release"
 gcc -O2 -Wall -Wextra -Werror -I"${sourceDir}" \
     "${tempDir}/version-test.c" "${sourceDir}/ota-exec.c" \
+    "${sourceDir}/ota-state.c" \
     -o "${tempDir}/version-test"
 OTA_AGENT_OS_RELEASE_FILE="${tempDir}/os-release" \
     "${tempDir}/version-test" >"${tempDir}/version.out"

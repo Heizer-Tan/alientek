@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct JsonBuilder {
@@ -579,4 +580,63 @@ int otaMqttPublishStatus(const char *topic, const char *payload)
     }
     errno = ENOSYS;
     return -1;
+}
+
+static const char *statusTopic(void)
+{
+    const char *topic = getenv("OTA_MQTT_STATUS_TOPIC");
+
+    return topic == NULL || topic[0] == '\0' ? "device/ota/status" : topic;
+}
+
+static int publishFinalState(const OtaState *state)
+{
+    char payload[512];
+
+    if (otaMqttBuildStatusPayload(state, payload, sizeof(payload)) != 0) {
+        return -1;
+    }
+    if (otaMqttPublishStatus(statusTopic(), payload) == 0) {
+        return 0;
+    }
+    if (errno != ENOSYS) {
+        return -1;
+    }
+    /* 发布接缝未实现时保留本地 payload，确保最终结果可观测。 */
+    if (puts(payload) == EOF) {
+        errno = EIO;
+        return -1;
+    }
+    return 0;
+}
+
+int otaReportCommittedState(const OtaState *state)
+{
+    OtaState reportState;
+
+    if (state == NULL) {
+        return failWithErrno(EINVAL);
+    }
+    reportState = *state;
+    if (otaStateSetResult(&reportState, "committed", "success",
+                          reportState.detail[0] == '\0'
+                              ? "升级已提交"
+                              : reportState.detail) != 0) {
+        return -1;
+    }
+    return publishFinalState(&reportState);
+}
+
+int otaReportFailureState(const OtaState *state, const char *reason)
+{
+    OtaState reportState;
+
+    if (state == NULL || reason == NULL || reason[0] == '\0') {
+        return failWithErrno(EINVAL);
+    }
+    reportState = *state;
+    if (otaStateSetResult(&reportState, "failed", "error", reason) != 0) {
+        return -1;
+    }
+    return publishFinalState(&reportState);
 }

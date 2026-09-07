@@ -302,3 +302,28 @@ int otaStateRequestSeen(const OtaState *state, const char *requestId)
     }
     return strcmp(state->requestId, requestId) == 0;
 }
+
+int otaStateSetResult(OtaState *state, const char *phase,
+                      const char *result, const char *detail)
+{
+    if (state == NULL || phase == NULL || result == NULL || detail == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (strlen(phase) >= sizeof(state->phase) ||
+        strlen(result) >= sizeof(state->result) ||
+        strlen(detail) >= sizeof(state->detail)) {
+        errno = EOVERFLOW;
+        return -1;
+    }
+    if (phase != state->phase) {
+        (void)snprintf(state->phase, sizeof(state->phase), "%s", phase);
+    }
+    if (result != state->result) {
+        (void)snprintf(state->result, sizeof(state->result), "%s", result);
+    }
+    if (detail != state->detail) {
+        (void)snprintf(state->detail, sizeof(state->detail), "%s", detail);
+    }
+    return 0;
+}

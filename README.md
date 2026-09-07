@@ -181,6 +181,18 @@ fw_printenv bootcount
 
 当前板级 `boot.scr` 会按 `active_slot` 在 `/dev/mmcblk0p2` 与 `/dev/mmcblk0p3` 间切换；这是因为现有 U-Boot 配置未启用 `part` 命令，暂未使用 `PARTUUID` 方式传根分区。
 
+## MQTT OTA
+
+`ota-agent` 提供 MQTT OTA 的板端闭环：
+
+1. 解析包含 `requestId`、目标版本、下载地址、SHA256 和重启选项的命令。
+2. 下载并校验 `.swu`，在执行升级前持久化目标槽位和任务阶段。
+3. 调用 `board-apply-update` 写入非活动槽位，由现有 A/B 机制切槽、提交或回滚。
+4. 重启后加载 `/var/lib/ota-agent/state.json`，结合 `/proc/cmdline`、`active_slot`、`last_good_slot` 和 `upgrade_available` 判定最终结果。
+5. 新槽位完成提交时回报 `committed/success`；回到旧槽位或目标槽位不一致时回报 `failed/error`。
+
+当前 broker 连接与发布仍是返回 `ENOSYS` 的接缝。此时最终状态 payload 会输出到本地标准输出，便于板端日志和宿主测试观察，不会静默丢失恢复结果。
+
 ## 按键演示（key-monitor）
 
 串口登录后：`key-monitor`（自动找 `gpio-keys`），按 KEY0 会打印 `type=1 code=28 value=1/0`。可选自启：`update-rc.d key-monitor defaults && /etc/init.d/key-monitor start`（写 syslog）。

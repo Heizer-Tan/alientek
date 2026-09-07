@@ -18,5 +18,7 @@ int otaStateSave(const char *path, const OtaState *state);
 int otaStateAcquireLock(const char *lockPath);
 void otaStateReleaseLock(int lockFd, const char *lockPath);
 int otaStateRequestSeen(const OtaState *state, const char *requestId);
+int otaStateSetResult(OtaState *state, const char *phase,
+                      const char *result, const char *detail);
 
 #endif

@@ -18,5 +18,7 @@ int otaMqttParseCommandJson(const char *jsonText, OtaState *state,
 int otaHandleCommandJson(const char *jsonText, OtaState *state);
 int otaMqttBuildStatusPayload(const OtaState *state, char *payload,
                               size_t payloadSize);
+int otaReportCommittedState(const OtaState *state);
+int otaReportFailureState(const OtaState *state, const char *reason);
 
 #endif

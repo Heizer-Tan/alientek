@@ -50,6 +50,7 @@ static int executeApplyPipeline(const char *url, const char *sha256,
                                 char *errorBuf, size_t errorBufSize)
 {
     if (otaCheckUpgradeAllowed(errorBuf, errorBufSize) != 0 ||
+        otaPrepareTargetSlot(state, errorBuf, errorBufSize) != 0 ||
         savePhase(statePath, state, "downloading",
                   errorBuf, errorBufSize) != 0) {
         return -1;
@@ -179,10 +180,66 @@ static void initializeMqtt(void)
     }
 }
 
+static int isPendingRecovery(const OtaState *state)
+{
+    return strcmp(state->phase, "upgrading") == 0 ||
+           strcmp(state->phase, "installing") == 0;
+}
+
+static int recoverPendingAtStartup(const char *statePath)
+{
+    OtaState state;
+    int reportResult;
+
+    memset(&state, 0, sizeof(state));
+    if (otaStateLoad(statePath, &state) != 0) {
+        if (errno == ENOENT) {
+            return 0;
+        }
+        fprintf(stderr, "加载待恢复 OTA 状态失败: %s\n", strerror(errno));
+        return -1;
+    }
+    if (!isPendingRecovery(&state)) {
+        return 0;
+    }
+    if (otaRecoverPendingState(&state) != 0) {
+        if (errno == EAGAIN) {
+            return 1;
+        }
+        fprintf(stderr, "判定 OTA 恢复结果失败: %s\n", strerror(errno));
+        return -1;
+    }
+    reportResult = strcmp(state.phase, "committed") == 0
+                       ? otaReportCommittedState(&state)
+                       : otaReportFailureState(&state, state.detail);
+    if (reportResult != 0) {
+        fprintf(stderr, "回报 OTA 最终状态失败: %s\n", strerror(errno));
+        return -1;
+    }
+    if (otaStateSave(statePath, &state) != 0) {
+        fprintf(stderr, "保存 OTA 最终状态失败: %s\n", strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+static void completeStartupRecovery(const char *statePath)
+{
+    int recoveryResult = recoverPendingAtStartup(statePath);
+
+    /* 首启提交脚本稍后运行时，短暂等待后再次判定最终状态。 */
+    while (recoveryResult == 1) {
+        sleep(1);
+        recoveryResult = recoverPendingAtStartup(statePath);
+    }
+}
+
 int otaAgentRunForeground(void)
 {
     const char *lockPath = readPathSetting(
         "OTA_AGENT_LOCK_FILE", "/var/run/ota-agent.lock");
+    const char *statePath = readPathSetting(
+        "OTA_AGENT_STATE_FILE", "/var/lib/ota-agent/state.json");
     int lockFd = otaStateAcquireLock(lockPath);
 
     if (lockFd < 0) {
@@ -191,6 +248,7 @@ int otaAgentRunForeground(void)
     }
     puts("ota-agent foreground mode");
     initializeMqtt();
+    completeStartupRecovery(statePath);
 
     /* 当前保持单实例常驻，真实 broker 事件循环由后续任务接入。 */
     for (;;) {

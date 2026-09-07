@@ -69,6 +69,22 @@
 
 - 真实损坏场景下的自动失败回滚
 
+### 3.1 MQTT OTA Agent
+
+镜像内的 `ota-agent` 当前具备：
+
+- MQTT OTA 命令 JSON 的严格解析和状态 payload 生成
+- `.swu` 下载、SHA256 校验、升级 guard 和 `board-apply-update` 调用
+- 升级前持久化请求、目标版本、目标槽位、阶段和自动重启选项
+- 重启后结合实际根分区及 U-Boot 环境恢复任务
+- 对成功提交回报 `committed/success`，对回滚或槽位不一致回报 `failed/error`
+
+能力边界：
+
+- MQTT broker 连接、订阅和发布目前仍是 `ENOSYS` 薄接缝，不包含真实常驻消息循环
+- 发布接缝不可用时会在本地输出完整最终状态 payload，恢复结论仍可观察
+- 最终成功仍以 `board-upgrade-commit` 完成槽位提交为准，不包含业务服务健康检查
+
 ## 4. 网络能力
 
 当前镜像区分两类网络场景：
@@ -183,6 +199,7 @@ NFS 场景下，内核通过 `ip=` 参数完成基础网络配置。
 当前仍有几项边界需要明确：
 
 - 失败回滚链路的真实损坏场景还没有完成板端实测
+- MQTT broker 常驻连接与真实发布尚未接入，当前使用本地 payload 输出验证
 - `sw-description` 中 `compressed = true` 仍是兼容写法，建议改为 `compressed = "zlib"`
 - 当前根分区选择仍依赖 `/dev/mmcblk0p2/p3`，尚未切到更稳健的 `PARTUUID` 方案
 - 升级成功判定目前以“进入用户态并执行提交脚本”为准，还没有把业务服务健康检查纳入最终提交条件

@@ -1,5 +1,6 @@
 #include "ota-exec.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -59,13 +60,19 @@ static int runCommand(char *const args[], const char *name,
     return waitForCommand(pid, name, errorBuf, errorBufSize);
 }
 
-static int readUpgradeAvailable(char *value, size_t valueSize,
-                                char *errorBuf, size_t errorBufSize)
+static int readEnvironmentValue(const char *name, char *value,
+                                size_t valueSize, char *errorBuf,
+                                size_t errorBufSize)
 {
     int outputPipe[2];
     pid_t pid;
     ssize_t count;
 
+    if (name == NULL || value == NULL || valueSize < 2U) {
+        errno = EINVAL;
+        setError(errorBuf, errorBufSize, "读取 U-Boot 环境变量参数无效");
+        return -1;
+    }
     if (pipe(outputPipe) != 0) {
         setError(errorBuf, errorBufSize, "创建 fw_printenv 管道失败: %s",
                  strerror(errno));
@@ -76,20 +83,52 @@ static int readUpgradeAvailable(char *value, size_t valueSize,
         (void)dup2(outputPipe[1], STDOUT_FILENO);
         close(outputPipe[0]);
         close(outputPipe[1]);
-        execlp("fw_printenv", "fw_printenv", "-n", "upgrade_available",
-               (char *)NULL);
+        execlp("fw_printenv", "fw_printenv", "-n", name, (char *)NULL);
         _exit(127);
     }
     close(outputPipe[1]);
     count = pid < 0 ? -1 : read(outputPipe[0], value, valueSize - 1U);
     close(outputPipe[0]);
     if (pid < 0 || count < 0) {
-        setError(errorBuf, errorBufSize, "读取 upgrade_available 失败: %s",
+        setError(errorBuf, errorBufSize, "读取 %s 失败: %s", name,
                  strerror(errno));
         return -1;
     }
     value[count] = '\0';
     return waitForCommand(pid, "fw_printenv", errorBuf, errorBufSize);
+}
+
+static int readUpgradeAvailable(char *value, size_t valueSize,
+                                char *errorBuf, size_t errorBufSize)
+{
+    return readEnvironmentValue("upgrade_available", value, valueSize,
+                                errorBuf, errorBufSize);
+}
+
+int otaPrepareTargetSlot(OtaState *state, char *errorBuf, size_t errorBufSize)
+{
+    char activeSlot[8];
+    size_t length;
+
+    if (state == NULL) {
+        errno = EINVAL;
+        setError(errorBuf, errorBufSize, "OTA 状态不能为空");
+        return -1;
+    }
+    if (readEnvironmentValue("active_slot", activeSlot, sizeof(activeSlot),
+                             errorBuf, errorBufSize) != 0) {
+        return -1;
+    }
+    length = strcspn(activeSlot, "\r\n");
+    activeSlot[length] = '\0';
+    if (strcmp(activeSlot, "A") != 0 && strcmp(activeSlot, "B") != 0) {
+        errno = EINVAL;
+        setError(errorBuf, errorBufSize, "active_slot 值无效: %s", activeSlot);
+        return -1;
+    }
+    (void)snprintf(state->targetSlot, sizeof(state->targetSlot), "%s",
+                   strcmp(activeSlot, "A") == 0 ? "B" : "A");
+    return 0;
 }
 
 int otaCheckUpgradeAllowed(char *errorBuf, size_t errorBufSize)
@@ -184,4 +223,128 @@ int otaReadCurrentVersion(char *versionBuf, size_t versionBufSize)
     errno = ferror(file) ? EIO : EINVAL;
     (void)fclose(file);
     return -1;
+}
+
+static int normalizeEnvironmentValue(char *value, const char *name)
+{
+    size_t length = strcspn(value, "\r\n");
+
+    value[length] = '\0';
+    if (value[0] == '\0') {
+        errno = ENODATA;
+        return -1;
+    }
+    if ((strcmp(name, "upgrade_available") == 0 &&
+         strcmp(value, "0") != 0 && strcmp(value, "1") != 0) ||
+        (strcmp(name, "upgrade_available") != 0 &&
+         strcmp(value, "A") != 0 && strcmp(value, "B") != 0)) {
+        errno = EINVAL;
+        return -1;
+    }
+    return 0;
+}
+
+static int readRecoveryEnvironment(char *activeSlot, char *lastGoodSlot,
+                                   char *upgradeAvailable)
+{
+    char errorBuf[128];
+
+    if (readEnvironmentValue("active_slot", activeSlot, 8,
+                             errorBuf, sizeof(errorBuf)) != 0 ||
+        normalizeEnvironmentValue(activeSlot, "active_slot") != 0 ||
+        readEnvironmentValue("last_good_slot", lastGoodSlot, 8,
+                             errorBuf, sizeof(errorBuf)) != 0 ||
+        normalizeEnvironmentValue(lastGoodSlot, "last_good_slot") != 0 ||
+        readEnvironmentValue("upgrade_available", upgradeAvailable, 8,
+                             errorBuf, sizeof(errorBuf)) != 0 ||
+        normalizeEnvironmentValue(upgradeAvailable, "upgrade_available") != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+static int hasCmdlineToken(const char *cmdline, const char *token)
+{
+    const char *match = cmdline;
+    size_t tokenLength = strlen(token);
+
+    while ((match = strstr(match, token)) != NULL) {
+        int startsToken = match == cmdline || match[-1] == ' ';
+        char next = match[tokenLength];
+
+        if (startsToken && (next == '\0' || isspace((unsigned char)next))) {
+            return 1;
+        }
+        match += tokenLength;
+    }
+    return 0;
+}
+
+static int readCurrentSlot(char *currentSlot, size_t currentSlotSize)
+{
+    const char *path = getenv("BOARD_CMDLINE_FILE");
+    char cmdline[2048];
+    FILE *file;
+
+    if (currentSlot == NULL || currentSlotSize < 2U) {
+        errno = EINVAL;
+        return -1;
+    }
+    path = path == NULL || path[0] == '\0' ? "/proc/cmdline" : path;
+    file = fopen(path, "r");
+    if (file == NULL) {
+        return -1;
+    }
+    if (fgets(cmdline, sizeof(cmdline), file) == NULL) {
+        int savedError = ferror(file) ? EIO : ENODATA;
+
+        (void)fclose(file);
+        errno = savedError;
+        return -1;
+    }
+    (void)fclose(file);
+    if (hasCmdlineToken(cmdline, "root=/dev/mmcblk0p2") ||
+        hasCmdlineToken(cmdline, "root=PARTLABEL=rootfsA")) {
+        return snprintf(currentSlot, currentSlotSize, "A") == 1 ? 0 : -1;
+    }
+    if (hasCmdlineToken(cmdline, "root=/dev/mmcblk0p3") ||
+        hasCmdlineToken(cmdline, "root=PARTLABEL=rootfsB")) {
+        return snprintf(currentSlot, currentSlotSize, "B") == 1 ? 0 : -1;
+    }
+    errno = ENODEV;
+    return -1;
+}
+
+int otaRecoverPendingState(OtaState *state)
+{
+    char currentSlot[8];
+    char activeSlot[8];
+    char lastGoodSlot[8];
+    char upgradeAvailable[8];
+
+    if (state == NULL ||
+        (strcmp(state->targetSlot, "A") != 0 &&
+         strcmp(state->targetSlot, "B") != 0)) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (readCurrentSlot(currentSlot, sizeof(currentSlot)) != 0 ||
+        readRecoveryEnvironment(activeSlot, lastGoodSlot,
+                                upgradeAvailable) != 0) {
+        return -1;
+    }
+    if (strcmp(currentSlot, state->targetSlot) == 0 &&
+        strcmp(activeSlot, state->targetSlot) == 0 &&
+        strcmp(upgradeAvailable, "1") == 0) {
+        errno = EAGAIN;
+        return -1;
+    }
+    if (strcmp(currentSlot, state->targetSlot) == 0 &&
+        strcmp(activeSlot, state->targetSlot) == 0 &&
+        strcmp(lastGoodSlot, state->targetSlot) == 0 &&
+        strcmp(upgradeAvailable, "0") == 0) {
+        return otaStateSetResult(state, "committed", "success", "升级已提交");
+    }
+    return otaStateSetResult(state, "failed", "error",
+                             "升级后未运行在目标槽位");
 }

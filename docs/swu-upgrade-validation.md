@@ -249,3 +249,42 @@ mount | grep " / "
 - 基本用户态可运行
 
 它还没有把 `ap3216c-logger`、`board-web` 等业务服务健康检查纳入“提交新槽位”的判定。如果后续要更稳，可以把提交动作延后到业务健康检查通过之后。
+
+## 6. 验证 MQTT OTA 跨重启恢复
+
+先确认状态文件记录了本次请求和目标槽位：
+
+```bash
+cat /var/lib/ota-agent/state.json
+```
+
+完成升级并重启后，检查恢复判定所使用的全部输入：
+
+```bash
+cat /proc/cmdline
+fw_printenv active_slot
+fw_printenv last_good_slot
+fw_printenv upgrade_available
+cat /var/lib/ota-agent/state.json
+```
+
+成功提交路径应满足：实际启动槽位、`active_slot`、`last_good_slot` 均等于状态文件中的 `targetSlot`，且 `upgrade_available=0`。最终状态文件和本地 payload 应包含：
+
+```json
+{"phase":"committed","result":"success"}
+```
+
+失败回滚路径应看到实际启动槽位或 `active_slot` 与 `targetSlot` 不同。最终状态文件和本地 payload 应包含：
+
+```json
+{"phase":"failed","result":"error"}
+```
+
+当前 MQTT 发布接缝返回 `ENOSYS` 时，`ota-agent` 会把完整 payload 输出到本地。可停止服务后以前台方式复核：
+
+```bash
+/etc/init.d/ota-agent stop
+ota-agent
+```
+
+观察到最终 payload 后按 `Ctrl+C` 退出，再执行 `/etc/init.d/ota-agent start` 恢复服务。若状态仍处于 `upgrading` 且 `upgrade_available=1`，agent 会等待首启提交完成后再次判定，不会提前回报成功。
