@@ -68,17 +68,24 @@ static int writeState(FILE *file, const OtaState *state)
     return 0;
 }
 
-static char decodeEscapedCharacter(char character)
+static int decodeEscapedCharacter(char character, char *decoded)
 {
     switch (character) {
+    case '"':
+    case '\\':
+        *decoded = character;
+        return 0;
     case 'n':
-        return '\n';
+        *decoded = '\n';
+        return 0;
     case 'r':
-        return '\r';
+        *decoded = '\r';
+        return 0;
     case 't':
-        return '\t';
+        *decoded = '\t';
+        return 0;
     default:
-        return character;
+        return -1;
     }
 }
 
@@ -91,11 +98,14 @@ static int decodeString(const char *encoded, char *output, size_t outputSize)
     }
     while (*encoded != '\0' && *encoded != '"') {
         if (*encoded == '\\' && encoded[1] != '\0') {
+            char decoded;
+
             ++encoded;
-            if (outputLength + 1 >= outputSize) {
+            if (decodeEscapedCharacter(*encoded++, &decoded) < 0 ||
+                outputLength + 1 >= outputSize) {
                 return -1;
             }
-            output[outputLength++] = decodeEscapedCharacter(*encoded++);
+            output[outputLength++] = decoded;
             continue;
         }
         if (outputLength + 1 >= outputSize) {
@@ -175,11 +185,26 @@ static char *createTempPath(const char *path)
     return tempPath;
 }
 
+static int writeAndCloseState(FILE *file, const OtaState *state)
+{
+    int result = writeState(file, state);
+    int savedError = result < 0 ? errno : 0;
+
+    if (fclose(file) != 0 && result == 0) {
+        result = -1;
+        savedError = errno;
+    }
+    if (result < 0) {
+        errno = savedError != 0 ? savedError : EIO;
+    }
+    return result;
+}
+
 int otaStateSave(const char *path, const OtaState *state)
 {
     char *tempPath;
     FILE *file;
-    int result = -1;
+    int savedError;
 
     if (path == NULL || state == NULL) {
         errno = EINVAL;
@@ -190,21 +215,20 @@ int otaStateSave(const char *path, const OtaState *state)
         return -1;
     }
     file = fopen(tempPath, "w");
-    if (file != NULL && writeState(file, state) == 0) {
-        result = fclose(file);
-        file = NULL;
-        if (result == 0) {
-            result = rename(tempPath, path);
-        }
+    if (file == NULL) {
+        savedError = errno;
+    } else if (writeAndCloseState(file, state) < 0) {
+        savedError = errno;
+    } else if (rename(tempPath, path) < 0) {
+        savedError = errno;
+    } else {
+        free(tempPath);
+        return 0;
     }
-    if (file != NULL) {
-        (void)fclose(file);
-    }
-    if (result < 0) {
-        (void)unlink(tempPath);
-    }
+    (void)unlink(tempPath);
     free(tempPath);
-    return result;
+    errno = savedError;
+    return -1;
 }
 
 int otaStateLoad(const char *path, OtaState *state)
@@ -212,6 +236,7 @@ int otaStateLoad(const char *path, OtaState *state)
     OtaState loadedState;
     FILE *file;
     int result;
+    int savedError = 0;
 
     if (path == NULL || state == NULL) {
         errno = EINVAL;
@@ -222,12 +247,17 @@ int otaStateLoad(const char *path, OtaState *state)
         return -1;
     }
     memset(&loadedState, 0, sizeof(loadedState));
+    errno = 0;
     result = readState(file, &loadedState);
-    if (fclose(file) != 0) {
+    if (result < 0) {
+        savedError = ferror(file) ? (errno != 0 ? errno : EIO) : EINVAL;
+    }
+    if (fclose(file) != 0 && result == 0) {
         result = -1;
+        savedError = errno;
     }
     if (result < 0) {
-        errno = EINVAL;
+        errno = savedError;
         return -1;
     }
     *state = loadedState;
@@ -257,11 +287,9 @@ int otaStateAcquireLock(const char *lockPath)
 
 void otaStateReleaseLock(int lockFd, const char *lockPath)
 {
+    (void)lockPath;
     if (lockFd < 0) {
         return;
-    }
-    if (lockPath != NULL) {
-        (void)unlink(lockPath);
     }
     (void)flock(lockFd, LOCK_UN);
     (void)close(lockFd);
