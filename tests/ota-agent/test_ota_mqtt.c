@@ -25,6 +25,34 @@ static void testValidCommand(void)
     assert(state.autoReboot == 1);
 }
 
+static void testValidEscapedSlashUrl(void)
+{
+    const char *jsonText =
+        "{\"requestId\":\"req-42\",\"version\":\"2.0.1\","
+        "\"url\":\"https:\\/\\/example.com\\/update.swu\","
+        "\"sha256\":\"0123456789abcdef0123456789abcdef"
+        "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
+    OtaState state = {0};
+    OtaMqttCommand command = {0};
+
+    assert(otaMqttParseCommandJson(jsonText, &state, &command) == 0);
+    assert(strcmp(command.url, "https://example.com/update.swu") == 0);
+}
+
+static void testRejectsVerticalTabWhitespace(void)
+{
+    const char *jsonText =
+        "{\v\"requestId\":\"req-42\",\"version\":\"2.0.1\","
+        "\"url\":\"https://example.com/update.swu\","
+        "\"sha256\":\"0123456789abcdef0123456789abcdef"
+        "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
+    OtaState state = {0};
+
+    errno = 0;
+    assert(otaHandleCommandJson(jsonText, &state) == -1);
+    assert(errno == EBADMSG);
+}
+
 static void testRejectsTrailingGarbage(void)
 {
     const char *jsonText =
@@ -190,6 +218,8 @@ static void testStatusPayloadEscapesAllControlCharacters(void)
 int main(void)
 {
     testValidCommand();
+    testRejectsVerticalTabWhitespace();
+    testValidEscapedSlashUrl();
     testMissingField();
     testInvalidSha256Length();
     testInvalidBooleanToken();

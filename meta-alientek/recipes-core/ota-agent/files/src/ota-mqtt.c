@@ -22,7 +22,8 @@ enum CommandField {
 
 static const unsigned char *skipJsonSpace(const unsigned char *cursor)
 {
-    while (isspace(*cursor)) {
+    while (*cursor == ' ' || *cursor == '\t' ||
+           *cursor == '\n' || *cursor == '\r') {
         ++cursor;
     }
     return cursor;
@@ -32,6 +33,131 @@ static int failWithErrno(int errorNumber)
 {
     errno = errorNumber;
     return -1;
+}
+
+static int hexDigitValue(unsigned char character)
+{
+    if (character >= '0' && character <= '9') {
+        return character - '0';
+    }
+    if (character >= 'a' && character <= 'f') {
+        return character - 'a' + 10;
+    }
+    if (character >= 'A' && character <= 'F') {
+        return character - 'A' + 10;
+    }
+    return -1;
+}
+
+static int parseUnicodeCodeUnit(const unsigned char **cursor,
+                                unsigned int *codeUnit)
+{
+    unsigned int value = 0;
+    int index;
+
+    for (index = 0; index < 4; ++index) {
+        int digit = hexDigitValue((*cursor)[index]);
+
+        if (digit < 0) {
+            return failWithErrno(EBADMSG);
+        }
+        value = (value << 4) | (unsigned int)digit;
+    }
+    *cursor += 4;
+    *codeUnit = value;
+    return 0;
+}
+
+static int parseUnicodeScalar(const unsigned char **cursor,
+                              unsigned int *scalar)
+{
+    unsigned int high;
+    unsigned int low;
+
+    if (parseUnicodeCodeUnit(cursor, &high) != 0) {
+        return -1;
+    }
+    if (high < 0xd800 || high > 0xdfff) {
+        *scalar = high;
+        return 0;
+    }
+    if (high > 0xdbff || (*cursor)[0] != '\\' || (*cursor)[1] != 'u') {
+        return failWithErrno(EBADMSG);
+    }
+    *cursor += 2;
+    if (parseUnicodeCodeUnit(cursor, &low) != 0 ||
+        low < 0xdc00 || low > 0xdfff) {
+        return failWithErrno(EBADMSG);
+    }
+    *scalar = 0x10000 + ((high - 0xd800) << 10) + (low - 0xdc00);
+    return 0;
+}
+
+static size_t encodeUtf8(unsigned int scalar, unsigned char *bytes)
+{
+    if (scalar <= 0x7f) {
+        bytes[0] = (unsigned char)scalar;
+        return 1;
+    }
+    if (scalar <= 0x7ff) {
+        bytes[0] = 0xc0 | (scalar >> 6);
+        bytes[1] = 0x80 | (scalar & 0x3f);
+        return 2;
+    }
+    if (scalar <= 0xffff) {
+        bytes[0] = 0xe0 | (scalar >> 12);
+        bytes[1] = 0x80 | ((scalar >> 6) & 0x3f);
+        bytes[2] = 0x80 | (scalar & 0x3f);
+        return 3;
+    }
+    bytes[0] = 0xf0 | (scalar >> 18);
+    bytes[1] = 0x80 | ((scalar >> 12) & 0x3f);
+    bytes[2] = 0x80 | ((scalar >> 6) & 0x3f);
+    bytes[3] = 0x80 | (scalar & 0x3f);
+    return 4;
+}
+
+static int appendUtf8(unsigned int scalar, char *output, size_t outputSize,
+                      size_t *length)
+{
+    unsigned char bytes[4];
+    size_t count = encodeUtf8(scalar, bytes);
+    size_t index;
+
+    if (*length + count >= outputSize) {
+        return failWithErrno(EOVERFLOW);
+    }
+    for (index = 0; index < count; ++index) {
+        output[(*length)++] = (char)bytes[index];
+    }
+    return 0;
+}
+
+static int parseJsonEscape(const unsigned char **cursor, char *output,
+                           size_t outputSize, size_t *length)
+{
+    static const char escapes[] = "\"\\/bfnrt";
+    static const unsigned char values[] = {'"', '\\', '/', '\b', '\f',
+                                           '\n', '\r', '\t'};
+    const char *match;
+    unsigned int scalar;
+
+    ++*cursor;
+    match = strchr(escapes, **cursor);
+    if (match != NULL) {
+        scalar = values[match - escapes];
+        ++*cursor;
+    } else if (*(*cursor)++ == 'u') {
+        if (parseUnicodeScalar(cursor, &scalar) != 0) {
+            return -1;
+        }
+    } else {
+        return failWithErrno(EBADMSG);
+    }
+    if (scalar == 0) {
+        return failWithErrno(EINVAL);
+    }
+    return appendUtf8(scalar, output, outputSize, length);
 }
 
 static int parseJsonString(const unsigned char **cursor, char *output,
@@ -44,8 +170,14 @@ static int parseJsonString(const unsigned char **cursor, char *output,
     }
     ++*cursor;
     while (**cursor != '\0' && **cursor != '"') {
-        if (**cursor == '\\' || **cursor < 0x20) {
+        if (**cursor < 0x20) {
             return failWithErrno(EBADMSG);
+        }
+        if (**cursor == '\\') {
+            if (parseJsonEscape(cursor, output, outputSize, &length) != 0) {
+                return -1;
+            }
+            continue;
         }
         if (length + 1 >= outputSize) {
             return failWithErrno(EOVERFLOW);
