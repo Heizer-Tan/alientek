@@ -11,9 +11,9 @@
 set -eu
 
 agentName="ota-agent"
-agentBinary="/usr/bin/ota-agent"
-pidFile="/var/run/ota-agent.pid"
-configFile="/etc/default/ota-agent"
+agentBinary="${OTA_AGENT_BINARY:-/usr/bin/ota-agent}"
+pidFile="${OTA_AGENT_PID_FILE:-/var/run/ota-agent.pid}"
+configFile="${OTA_AGENT_CONFIG_FILE:-/etc/default/ota-agent}"
 
 if [ -f "${configFile}" ]; then
     # shellcheck disable=SC1090
@@ -31,16 +31,31 @@ startAgent() {
 }
 
 stopAgent() {
-    start-stop-daemon --stop --quiet --oknodo --pidfile "${pidFile}" --retry 5
+    if [ ! -f "${pidFile}" ]; then
+        printf '%s 未运行\n' "${agentName}"
+        return 0
+    fi
+
+    if ! start-stop-daemon --stop --test --quiet \
+        --pidfile "${pidFile}" --exec "${agentBinary}"; then
+        rm -f "${pidFile}"
+        printf '%s 未运行，已清理陈旧 PID 文件\n' "${agentName}"
+        return 0
+    fi
+
+    start-stop-daemon --stop --quiet --pidfile "${pidFile}" \
+        --exec "${agentBinary}" --retry 5
     rm -f "${pidFile}"
     printf '已停止 %s\n' "${agentName}"
 }
 
 showStatus() {
-    if [ -f "${pidFile}" ] && kill -0 "$(cat "${pidFile}")" 2>/dev/null; then
+    if [ -f "${pidFile}" ] && start-stop-daemon --stop --test --quiet \
+        --pidfile "${pidFile}" --exec "${agentBinary}"; then
         printf '%s 正在运行\n' "${agentName}"
         return 0
     fi
+    rm -f "${pidFile}"
     printf '%s 未运行\n' "${agentName}"
     return 3
 }
