@@ -56,7 +56,7 @@ if [[ -f "$img" ]]; then
   grep -q "iputils" "$img" || fail "镜像缺少 iputils"
 fi
 
-need "meta-alientek/recipes-kernel/linux/linux_7.1.bb"
+need "meta-alientek/recipes-kernel/linux/linux_7.2.bb"
 need "meta-alientek/recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dts"
 need "meta-alientek/recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dtsi"
 need "meta-alientek/recipes-bsp/u-boot/u-boot_2025.04.bb"
@@ -118,7 +118,7 @@ fi
 if [[ "${FULL:-1}" == "1" ]]; then
   need "meta-alientek/conf/machine/imx6ull-alientek-alpha.conf"
   need "meta-alientek/recipes-core/images/alientek-image-base.bb"
-  need "meta-alientek/recipes-kernel/linux/linux_7.1.bb"
+  need "meta-alientek/recipes-kernel/linux/linux_7.2.bb"
   need "meta-alientek/recipes-bsp/u-boot/u-boot_%.bbappend"
   need "scripts/build.sh"
   need "scripts/kas-env.sh"

@@ -22,7 +22,7 @@ print_usage() {
   echo "  --target RECIPE  只编指定 recipe（覆盖 yml 里的镜像目标）" >&2
   echo "  RECIPE           同 --target RECIPE，例如: $0 key-monitor" >&2
   echo "  默认: 若仅 meta-alientek 设备树有改动 → ./scripts/build-dtb.sh" >&2
-  echo "        否则编 alientek-image-base（未改动的包走 sstate）" >&2
+  echo "        否则编 alientek-image-update（未改动的包走 sstate）" >&2
 }
 
 # 解析参数：支持 ./scripts/build.sh key-monitor
@@ -181,11 +181,10 @@ run_fast_dtb() {
 run_kas() {
   local -a kas_cmd=("$@")
   local -a target_opts=()
+  local selected_target="${target:-alientek-image-update}"
 
-  if [[ -n "$target" ]]; then
-    target_opts=(--target "$target")
-    echo "INFO: 只构建 target=$target（其它未改 recipe 尽量走 sstate）" >&2
-  fi
+  target_opts=(--target "$selected_target")
+  echo "INFO: 只构建 target=$selected_target（其它未改 recipe 尽量走 sstate）" >&2
 
   if [[ "$fetch_only" -eq 1 ]]; then
     echo "INFO: --fetch-only，只下载依赖（层 + 源码），不编译。" >&2

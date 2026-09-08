@@ -1,9 +1,9 @@
 # 正点原子 i.MX6ULL 阿尔法 Yocto BSP
 
-当前板级默认：主线 **U-Boot 2026.07** + **Linux 7.1.4**，设备树 `imx6ull-alientek-alpha.dtb`（`PREFERRED_PROVIDER` 为 `u-boot` / `linux`）。
+当前板级默认：主线 **U-Boot 2026.07** + **Linux 7.2.4**，设备树 `imx6ull-alientek-alpha.dtb`（`PREFERRED_PROVIDER` 为 `u-boot` / `linux`）。
 
 
-第一期：主线 `linux (7.1.4)` + `u-boot (2026.07)`，TF 卡启动，双网口（AES DT：KSZ8081），NFS 根文件系统。
+第一期：主线 `linux (7.2.4)` + `u-boot (2026.07)`，TF 卡启动，双网口（AES DT：KSZ8081），NFS 根文件系统。
 
 ## 目录说明
 

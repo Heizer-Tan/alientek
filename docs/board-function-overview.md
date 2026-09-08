@@ -5,7 +5,7 @@
 ## 1. 基础软件栈
 
 - Bootloader：主线 `U-Boot 2026.07`
-- Kernel：主线 `Linux 7.1.4`
+- Kernel：主线 `Linux 7.2.4`
 - 设备树：`imx6ull-alientek-alpha.dtb`
 - Rootfs：Yocto `core-image-base` 衍生镜像 `alientek-image-base`
 - 启动方式：支持 TF 卡本地启动，也保留 NFS netboot 作为调试入口

@@ -1,11 +1,11 @@
 SUMMARY = "Mainline Linux kernel for Alientek i.MX6ULL Alpha (AES DT)"
-DESCRIPTION = "kernel.org stable 7.1.4 with Alientek AES board device tree"
+DESCRIPTION = "kernel.org stable 7.2.4 with Alientek AES board device tree"
 LICENSE = "GPL-2.0-only"
 LIC_FILES_CHKSUM = "file://COPYING;md5=6bc538ed5bd9a7fc9398086aedcd7e46"
 
 inherit kernel
 
-LINUX_VERSION = "7.1.4"
+LINUX_VERSION = "7.2.4"
 PV = "${LINUX_VERSION}"
 LOCALVERSION = "-alientek"
 
@@ -16,7 +16,7 @@ SRC_URI = "${KERNELORG_MIRROR}/linux/kernel/v7.x/linux-${PV}.tar.xz \
     file://imx6ull-alientek-alpha.dts \
     file://imx6ull-alientek-alpha.dtsi \
 "
-SRC_URI[sha256sum] = "1c63922a119675d38e3ae0f8f6ee07f15c41a786ab9ed66563749bb8c9a08e2e"
+SRC_URI[sha256sum] = "01710ee01737dac492f1bae52becd057e08d20d11589089aa06accff415c28dd"
 
 S = "${WORKDIR}/linux-${PV}"
 
@@ -43,7 +43,7 @@ do_configure:prepend() {
     install -D -m 0644 ${WORKDIR}/imx6ull-alientek-alpha.dtsi ${dts_dir}/imx6ull-alientek-alpha.dtsi
     mk="${dts_dir}/Makefile"
     if [ ! -f "${mk}" ]; then
-        die "未找到 ${mk}，Linux 7.1 DTS 布局已变"
+        die "未找到 ${mk}，Linux 7.2 DTS 布局已变"
     fi
     if ! grep -q 'imx6ull-alientek-alpha.dtb' "${mk}"; then
         awk '{print} /imx6ull-14x14-evk\.dtb/ && !done {print "\timx6ull-alientek-alpha.dtb \\"; done=1}' \
