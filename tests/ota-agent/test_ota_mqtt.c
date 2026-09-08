@@ -177,6 +177,19 @@ static void testRejectsRepeatedField(void)
     assert(errno == EEXIST);
 }
 
+static void testRejectsTrailingBackslashEscape(void)
+{
+    OtaState state;
+    OtaMqttCommand command;
+    const char *jsonText = "{\"requestId\":\"abc\\";
+
+    memset(&state, 0, sizeof(state));
+    memset(&command, 0, sizeof(command));
+    errno = 0;
+    assert(otaMqttParseCommandJson(jsonText, &state, &command) == -1);
+    assert(errno == EBADMSG);
+}
+
 static void testStatusPayload(void)
 {
     OtaState state = {0};
@@ -248,6 +261,7 @@ int main(void)
     testRejectsInvalidUtf8InCommandString();
     testRejectsVerticalTabWhitespace();
     testValidEscapedSlashUrl();
+    testRejectsTrailingBackslashEscape();
     testMissingField();
     testInvalidSha256Length();
     testInvalidBooleanToken();

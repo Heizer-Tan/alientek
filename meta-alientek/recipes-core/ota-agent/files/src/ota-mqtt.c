@@ -213,6 +213,10 @@ static int parseJsonEscape(const unsigned char **cursor, char *output,
     unsigned int scalar;
 
     ++*cursor;
+    if (**cursor == '\0') {
+        return failWithErrno(EBADMSG);
+    }
+    /* 仅在确认转义字符存在后再查表，避免将字符串终止符当作转义项。 */
     match = strchr(escapes, **cursor);
     if (match != NULL) {
         scalar = values[match - escapes];
