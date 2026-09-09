@@ -26,5 +26,16 @@ setenv mmcboot "echo Booting from MMC slot ${active_slot}...; run mmcargs; fatlo
 setenv netargs "setenv bootargs console=${console} root=/dev/nfs rw nfsroot=${serverip}:${nfsroot},nfsvers=3,tcp ip=${ipaddr}:${serverip}:${gatewayip}:${netmask}::eth1:off"
 setenv netboot "echo Booting from NFS...; run netargs; tftp ${loadaddr} zImage; tftp ${fdt_addr_r} ${fdtfile}; bootz ${loadaddr} - ${fdt_addr_r}"
 
-setenv bootcmd "run mmcboot"
-run mmcboot
+# 启动菜单：记住上次选择；首次默认 TF
+if test -z "${boot_mode}"; then setenv boot_mode mmc; fi
+if test -z "${bootmenu_default}"; then setenv bootmenu_default 0; fi
+
+setenv boot_tf 'setenv boot_mode mmc; setenv bootmenu_default 0; saveenv; run mmcboot'
+setenv boot_nfs 'setenv boot_mode nfs; setenv bootmenu_default 1; saveenv; run netboot'
+
+setenv bootmenu_0 'Boot from TF (mmc)=run boot_tf'
+setenv bootmenu_1 'Boot from NFS=run boot_nfs'
+setenv bootmenu_delay 5
+
+setenv bootcmd bootmenu
+bootmenu
