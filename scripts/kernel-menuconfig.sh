@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 在宿主机启动 kas 容器，打开内核 menuconfig（需要交互式 TTY）
+# 在宿主机启动 kas 容器，打开内核 menuconfig（需要交互式 TTY），
+# 退出后自动 diffconfig 并导出配置片段到 build/menuconfig/kernel.fragment.cfg
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,9 +10,10 @@ source "$root/scripts/kas-env.sh"
 
 print_usage() {
   echo "用法: $0" >&2
-  echo "  等价于: kas-container shell kas/alientek-alpha.yml" >&2
-  echo "          然后 bitbake virtual/kernel -c menuconfig" >&2
+  echo "  打开 menuconfig；退出保存后自动导出差异片段到" >&2
+  echo "  build/menuconfig/kernel.fragment.cfg" >&2
   echo "  请在仓库外的真实终端运行，不要在已有 kas-container shell 里再套一层。" >&2
+  echo "  导出片段需手工并入 kernel recipe 的 SRC_URI 才会持久生效。" >&2
 }
 
 require_tty() {
@@ -56,7 +58,30 @@ fail_if_bitbake_busy() {
 }
 
 run_menuconfig() {
-  local cmd="bitbake virtual/kernel -c menuconfig"
+  local cmd
+
+  # 与 build.sh --menuconfig 保持同一导出链路
+  read -r -d '' cmd <<'EOF' || true
+bitbake virtual/kernel -c menuconfig &&
+bitbake -c diffconfig virtual/kernel &&
+bb_env="$(bitbake -e virtual/kernel)" &&
+workdir="$(printf '%s\n' "${bb_env}" | sed -n 's/^WORKDIR="\([^"]*\)"$/\1/p' | sed -n '1p')" &&
+topdir="$(printf '%s\n' "${bb_env}" | sed -n 's/^TOPDIR="\([^"]*\)"$/\1/p' | sed -n '1p')" &&
+fragment="${workdir}/fragment.cfg" &&
+# TOPDIR 即 Yocto build 目录（仓库根下的 build/），避免 kas 内 pwd 已是 build 时再拼一层
+exportPath="${topdir}/menuconfig/kernel.fragment.cfg" &&
+mkdir -p "$(dirname "${exportPath}")" &&
+if [ -f "${fragment}" ]; then
+  cp "${fragment}" "${exportPath}"
+  echo "INFO: 配置片段已导出到 ${exportPath}"
+else
+  echo "WARN: 未找到 ${fragment}，请在 kas shell 内手工执行 bitbake -c diffconfig virtual/kernel" >&2
+fi
+EOF
+
+  echo "INFO: 打开 Linux kernel menuconfig" >&2
+  echo "INFO: 退出保存后将导出差异片段到 build/menuconfig/kernel.fragment.cfg" >&2
+  echo "INFO: 该片段不会自动写回 recipe；需要时请手工并入 SRC_URI" >&2
   if kas_using_host; then
     exec kas shell "$kas_yml" -c "$cmd"
   fi

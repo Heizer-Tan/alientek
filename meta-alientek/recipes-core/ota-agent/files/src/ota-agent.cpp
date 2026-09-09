@@ -1,8 +1,9 @@
-#include "ota-agent.h"
-#include "ota-download.h"
-#include "ota-exec.h"
-#include "ota-mqtt.h"
-#include "ota-state.h"
+#include "ota-agent.hpp"
+
+#include "ota-download.hpp"
+#include "ota-exec.hpp"
+#include "ota-mqtt.hpp"
+#include "ota-state.hpp"
 
 #include <errno.h>
 #include <stdio.h>
@@ -24,7 +25,13 @@ static int loadStateForApply(const char *statePath, OtaState *state,
                              char *errorBuf, size_t errorBufSize)
 {
     memset(state, 0, sizeof(*state));
-    if (otaStateLoad(statePath, state) == 0 || errno == ENOENT) {
+    if (otaStateLoad(statePath, state) == 0) {
+        return 0;
+    }
+    if (errno == ENOENT && otaStateLoadFromEnvironment(state) == 0) {
+        return 0;
+    }
+    if (errno == ENOENT) {
         return 0;
     }
     (void)snprintf(errorBuf, errorBufSize, "读取 OTA 状态失败: %s",
@@ -36,7 +43,8 @@ static int savePhase(const char *statePath, OtaState *state,
                      const char *phase, char *errorBuf, size_t errorBufSize)
 {
     (void)snprintf(state->phase, sizeof(state->phase), "%s", phase);
-    if (otaStateSave(statePath, state) == 0) {
+    if (otaStateSave(statePath, state) == 0 &&
+        otaStateSaveToEnvironment(state) == 0) {
         return 0;
     }
     (void)snprintf(errorBuf, errorBufSize, "保存 OTA 状态失败: %s",
@@ -125,6 +133,44 @@ static void emitMqttStatus(OtaState *state, const char *phase,
     }
 }
 
+static int compareVersionToken(const char **versionText)
+{
+    const char *cursor = *versionText;
+    int value = 0;
+
+    while (*cursor >= '0' && *cursor <= '9') {
+        value = value * 10 + (*cursor - '0');
+        ++cursor;
+    }
+    if (*cursor == '.') {
+        ++cursor;
+    }
+    *versionText = cursor;
+    return value;
+}
+
+static int compareVersions(const char *leftVersion, const char *rightVersion)
+{
+    const char *leftCursor = leftVersion;
+    const char *rightCursor = rightVersion;
+
+    while (*leftCursor != '\0' || *rightCursor != '\0') {
+        int leftValue = compareVersionToken(&leftCursor);
+        int rightValue = compareVersionToken(&rightCursor);
+
+        if (leftValue != rightValue) {
+            return leftValue < rightValue ? -1 : 1;
+        }
+    }
+    return 0;
+}
+
+static int rejectMqttCommand(OtaState *state, const char *detail, int exitCode)
+{
+    emitMqttStatus(state, "failed", "error", detail);
+    return exitCode;
+}
+
 static int otaAgentRunMqttCommand(int argc, char **argv)
 {
     const char *lockPath = readPathSetting(
@@ -133,18 +179,36 @@ static int otaAgentRunMqttCommand(int argc, char **argv)
         "OTA_AGENT_STATE_FILE", "/var/lib/ota-agent/state.json");
     OtaMqttCommand command;
     OtaState state;
+    OtaState previousState;
     char errorBuf[256];
+    char currentVersion[32];
     int lockFd;
     int result;
 
+    memset(&state, 0, sizeof(state));
     if (argc != 4 || otaMqttParseCommandJson(argv[2], &state, &command) != 0) {
-        fprintf(stderr, "MQTT OTA 命令 JSON 无效\n");
-        return 2;
+        (void)snprintf(state.detail, sizeof(state.detail), "%s",
+                       "MQTT OTA 命令 JSON 无效");
+        return rejectMqttCommand(&state, state.detail, 2);
+    }
+    if (loadStateForApply(statePath, &previousState, errorBuf, sizeof(errorBuf)) !=
+        0) {
+        return rejectMqttCommand(&state, errorBuf, 1);
+    }
+    if (otaStateRequestSeen(&previousState, state.requestId) != 0) {
+        return rejectMqttCommand(&state, "重复 requestId，拒绝执行", 1);
+    }
+    if (otaReadCurrentVersion(currentVersion, sizeof(currentVersion)) == 0 &&
+        compareVersions(state.version, currentVersion) <= 0) {
+        return rejectMqttCommand(&state, "目标版本不高于当前版本，拒绝执行", 1);
     }
     lockFd = otaStateAcquireLock(lockPath);
     if (lockFd < 0) {
-        fprintf(stderr, "ota-agent busy\n");
-        return 1;
+        return rejectMqttCommand(&state, "ota-agent busy", 1);
+    }
+    if (savePhase(statePath, &state, "received", errorBuf, sizeof(errorBuf)) != 0) {
+        otaStateReleaseLock(lockFd, lockPath);
+        return rejectMqttCommand(&state, errorBuf, 1);
     }
     emitMqttStatus(&state, "accepted", "running", "命令已解析");
     result = executeApplyPipeline(command.url, command.sha256, argv[3],
@@ -155,6 +219,18 @@ static int otaAgentRunMqttCommand(int argc, char **argv)
                    result == 0 ? "升级命令已执行" : errorBuf);
     otaStateReleaseLock(lockFd, lockPath);
     return result == 0 ? 0 : 1;
+}
+
+static int loadStateForRecovery(const char *statePath, OtaState *state)
+{
+    memset(state, 0, sizeof(*state));
+    if (otaStateLoad(statePath, state) == 0) {
+        return 2;
+    }
+    if (errno == ENOENT && otaStateLoadFromEnvironment(state) == 0) {
+        return 0;
+    }
+    return errno == ENOENT ? 1 : -1;
 }
 
 static void initializeMqtt(void)
@@ -196,7 +272,8 @@ static int reportAndSaveRecovery(const char *statePath, OtaState *state)
         fprintf(stderr, "回报 OTA 最终状态失败: %s\n", strerror(errno));
         return 1;
     }
-    if (otaStateSave(statePath, state) != 0) {
+    if (otaStateSave(statePath, state) != 0 ||
+        otaStateSaveToEnvironment(state) != 0) {
         fprintf(stderr, "保存 OTA 最终状态失败: %s\n", strerror(errno));
         return 1;
     }
@@ -206,14 +283,15 @@ static int reportAndSaveRecovery(const char *statePath, OtaState *state)
 static int recoverPendingAtStartup(const char *statePath)
 {
     OtaState state;
+    int loadResult;
 
-    memset(&state, 0, sizeof(state));
-    if (otaStateLoad(statePath, &state) != 0) {
-        if (errno == ENOENT) {
-            return 0;
-        }
+    loadResult = loadStateForRecovery(statePath, &state);
+    if (loadResult < 0) {
         fprintf(stderr, "加载待恢复 OTA 状态失败: %s\n", strerror(errno));
         return 1;
+    }
+    if (loadResult == 1) {
+        return 0;
     }
     if (!isPendingRecovery(&state)) {
         return 0;
@@ -240,27 +318,17 @@ static void completeStartupRecovery(const char *statePath)
 
 int otaAgentRunForeground(void)
 {
-    const char *lockPath = readPathSetting(
-        "OTA_AGENT_LOCK_FILE", "/var/run/ota-agent.lock");
     const char *statePath = readPathSetting(
         "OTA_AGENT_STATE_FILE", "/var/lib/ota-agent/state.json");
-    int lockFd = otaStateAcquireLock(lockPath);
 
-    if (lockFd < 0) {
-        fprintf(stderr, "ota-agent busy\n");
-        return 1;
-    }
     puts("ota-agent foreground mode");
     initializeMqtt();
     completeStartupRecovery(statePath);
 
-    /* 当前保持单实例常驻，真实 broker 事件循环由后续任务接入。 */
+    /* 常驻进程不再长期占用任务锁，避免阻塞 --apply 等执行入口。 */
     for (;;) {
         (void)pause();
     }
-
-    otaStateReleaseLock(lockFd, lockPath);
-    return 0;
 }
 
 int otaAgentRunDaemon(void)

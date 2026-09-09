@@ -28,10 +28,21 @@ case "$2" in
     active_slot) printf '%s\n' "${MOCK_ACTIVE_SLOT}" ;;
     last_good_slot) printf '%s\n' "${MOCK_LAST_GOOD_SLOT}" ;;
     upgrade_available) printf '%s\n' "${MOCK_UPGRADE_AVAILABLE}" ;;
+    ota_request_id) printf '%s\n' "${MOCK_OTA_REQUEST_ID:-}" ;;
+    ota_version) printf '%s\n' "${MOCK_OTA_VERSION:-}" ;;
+    ota_target_slot) printf '%s\n' "${MOCK_OTA_TARGET_SLOT:-}" ;;
+    ota_phase) printf '%s\n' "${MOCK_OTA_PHASE:-}" ;;
+    ota_result) printf '%s\n' "${MOCK_OTA_RESULT:-}" ;;
+    ota_detail) printf '%s\n' "${MOCK_OTA_DETAIL:-}" ;;
     *) exit 2 ;;
 esac
 EOF
 chmod +x "${mockBin}/fw_printenv"
+cat >"${mockBin}/fw_setenv" <<'EOF'
+#!/bin/sh
+set -eu
+printf '%s=%s\n' "$1" "${2-}" >>"${MOCK_FW_SETENV_LOG}"
+EOF
 cat >"${mockBin}/curl" <<'EOF'
 #!/bin/sh
 set -eu
@@ -49,11 +60,12 @@ cat >"${mockBin}/board-apply-update" <<'EOF'
 set -eu
 test -f "${1}"
 EOF
-chmod +x "${mockBin}/curl" "${mockBin}/board-apply-update"
+chmod +x "${mockBin}/curl" "${mockBin}/board-apply-update" \
+    "${mockBin}/fw_setenv"
 
 cat >"${tempDir}/test_ota_recovery.c" <<'EOF'
-#include "ota-exec.h"
-#include "ota-mqtt.h"
+#include "ota-exec.hpp"
+#include "ota-mqtt.hpp"
 
 #include <assert.h>
 #include <errno.h>
@@ -80,7 +92,7 @@ static void writeCmdline(const char *path, const char *rootDevice)
 
 static OtaState createPendingState(void)
 {
-    OtaState state = {0};
+    OtaState state = {};
 
     strcpy(state.requestId, "req-001");
     strcpy(state.version, "5.0.20");
@@ -150,14 +162,15 @@ int main(int argc, char **argv)
 }
 EOF
 
-gcc -O2 -Wall -Wextra -Werror -I"${sourceDir}" \
+g++ -O2 -Wall -Wextra -Werror -std=c++17 -x c++ -I"${sourceDir}" \
     "${tempDir}/test_ota_recovery.c" \
-    "${sourceDir}/ota-exec.c" \
-    "${sourceDir}/ota-mqtt.c" \
-    "${sourceDir}/ota-state.c" \
+    "${sourceDir}/ota-exec.cpp" \
+    "${sourceDir}/ota-mqtt.cpp" \
+    "${sourceDir}/ota-state.cpp" \
     -o "${tempDir}/test_ota_recovery"
 
 PATH="${mockBin}:${PATH}" \
+    MOCK_FW_SETENV_LOG="${tempDir}/fw-setenv.log" \
     OTA_MQTT_STATUS_TOPIC="device/test/ota/status" \
     "${tempDir}/test_ota_recovery" "${tempDir}/cmdline" \
     >"${tempDir}/recovery.out"
@@ -183,19 +196,25 @@ EOF
 printf '%s\n' 'console=ttymxc0 root=/dev/mmcblk0p3 rootwait' \
     >"${tempDir}/cmdline"
 make -C "${sourceDir}" clean >/dev/null
-make -C "${sourceDir}" CFLAGS='-O2 -Wall -Wextra -Werror' >/dev/null
+make -C "${sourceDir}" CXXFLAGS='-O2 -Wall -Wextra -Werror -std=c++17' >/dev/null
 printf '%s\n' 'test swu payload' >"${tempDir}/package.swu"
 printf '%s\n' 'console=ttymxc0 root=/dev/mmcblk0p2 rootwait' \
     >"${tempDir}/cmdline-a"
+cat >"${tempDir}/target-os-release" <<'EOF'
+NAME=Test
+VERSION_ID="5.0.19"
+EOF
 packageSha256="$(sha256sum "${tempDir}/package.swu" | awk '{print $1}')"
 commandJson="$(printf \
     '{"requestId":"req-target","version":"5.0.20","url":"https://updates.example.test/package.swu","sha256":"%s","autoReboot":false}' \
     "${packageSha256}")"
 PATH="${mockBin}:${PATH}" \
+    MOCK_FW_SETENV_LOG="${tempDir}/fw-setenv.log" \
     MOCK_PACKAGE="${tempDir}/package.swu" \
     MOCK_ACTIVE_SLOT="A" \
     MOCK_LAST_GOOD_SLOT="A" \
     MOCK_UPGRADE_AVAILABLE="0" \
+    OTA_AGENT_OS_RELEASE_FILE="${tempDir}/target-os-release" \
     BOARD_CMDLINE_FILE="${tempDir}/cmdline-a" \
     OTA_AGENT_STATE_FILE="${tempDir}/target-state.json" \
     OTA_AGENT_LOCK_FILE="${tempDir}/target.lock" \
@@ -205,6 +224,7 @@ grep -Eq '"targetSlot":[[:space:]]*"B"' "${tempDir}/target-state.json"
 
 set +e
 PATH="${mockBin}:${PATH}" \
+    MOCK_FW_SETENV_LOG="${tempDir}/fw-setenv.log" \
     MOCK_ACTIVE_SLOT="B" \
     MOCK_LAST_GOOD_SLOT="B" \
     MOCK_UPGRADE_AVAILABLE="0" \
@@ -222,5 +242,27 @@ grep -q '判定 OTA 恢复结果失败' "${tempDir}/startup.err"
 grep -q '"requestId":"req-startup"' "${tempDir}/startup.out"
 grep -q '"phase":"committed"' "${tempDir}/startup.out"
 grep -Eq '"phase":[[:space:]]*"committed"' "${tempDir}/state.json"
+
+set +e
+PATH="${mockBin}:${PATH}" \
+    MOCK_ACTIVE_SLOT="B" \
+    MOCK_LAST_GOOD_SLOT="B" \
+    MOCK_UPGRADE_AVAILABLE="0" \
+    MOCK_OTA_REQUEST_ID="req-env" \
+    MOCK_OTA_VERSION="5.0.20" \
+    MOCK_OTA_TARGET_SLOT="B" \
+    MOCK_OTA_PHASE="upgrading" \
+    MOCK_OTA_RESULT="" \
+    MOCK_OTA_DETAIL="" \
+    BOARD_CMDLINE_FILE="${tempDir}/cmdline" \
+    OTA_AGENT_STATE_FILE="${tempDir}/missing-state.json" \
+    OTA_AGENT_LOCK_FILE="${tempDir}/ota-agent.lock" \
+    timeout 3 stdbuf -o0 -e0 "${agentBinary}" \
+    >"${tempDir}/env-startup.out" 2>"${tempDir}/env-startup.err"
+envStartupStatus="$?"
+set -e
+test "${envStartupStatus}" -eq 124
+grep -q '"requestId":"req-env"' "${tempDir}/env-startup.out"
+grep -q '"phase":"committed"' "${tempDir}/env-startup.out"
 
 echo "ota-agent recovery and final status passed"

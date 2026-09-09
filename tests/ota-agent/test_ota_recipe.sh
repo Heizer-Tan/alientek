@@ -6,8 +6,8 @@ image="meta-alientek/recipes-core/images/alientek-image-base.bb"
 
 for sourceFile in \
     meta-alientek/recipes-core/ota-agent/files/src/Makefile \
-    meta-alientek/recipes-core/ota-agent/files/src/ota-agent.h \
-    meta-alientek/recipes-core/ota-agent/files/src/ota-agent.c \
+    meta-alientek/recipes-core/ota-agent/files/src/ota-agent.hpp \
+    meta-alientek/recipes-core/ota-agent/files/src/ota-agent.cpp \
     meta-alientek/recipes-core/ota-agent/files/ota-agent.init \
     meta-alientek/recipes-core/ota-agent/files/ota-agent.default
 do

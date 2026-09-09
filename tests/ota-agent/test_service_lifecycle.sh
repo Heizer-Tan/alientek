@@ -25,7 +25,7 @@ trap cleanup EXIT INT TERM
 
 make -C "${sourceDir}" clean >/dev/null
 make -C "${sourceDir}" \
-    CFLAGS='-O2 -Wall -Wextra -Werror' >/dev/null
+    CXXFLAGS='-O2 -Wall -Wextra -Werror -std=c++17' >/dev/null
 
 runService() {
     OTA_AGENT_BINARY="${agentBinary}" \

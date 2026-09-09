@@ -260,10 +260,12 @@
 		compatible = "goodix,gt9147", "goodix,gt9xx";
 		reg = <0x5d>;
 		pinctrl-names = "default";
+		/* INT 复用已有 pinctrl_tsc（GPIO1_IO09），勿引用不存在的 pinctrl_tsc_int */
 		pinctrl-0 = <&pinctrl_tsc &pinctrl_tsc_reset>;
 		interrupt-parent = <&gpio1>;
 		interrupts = <9 0>;
-		reset-gpios = <&gpio1 5 GPIO_ACTIVE_LOW>;
+		/* 与 pinctrl_tsc_reset（SNVS_TAMPER9 / GPIO5_IO09）保持一致 */
+		reset-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>;
 		interrupt-gpios = <&gpio1 9 GPIO_ACTIVE_LOW>;
 		status = "okay";
 		vdd-supply = <&reg_vddio>;
@@ -710,8 +712,8 @@
 
 	pinctrl_tsc_reset: tsc_reset {
 		fsl,pins = <
-			MX6UL_PAD_GPIO1_IO05__GPIO1_IO05 0x10B0
-        	/* MX6ULL_PAD_SNVS_TAMPER9__GPIO5_IO09 	0x10B0 */
+			/* MX6UL_PAD_GPIO1_IO05__GPIO1_IO05 0x10B0 */
+        	MX6ULL_PAD_SNVS_TAMPER9__GPIO5_IO09 	0x10B0
         >;
 	};
 

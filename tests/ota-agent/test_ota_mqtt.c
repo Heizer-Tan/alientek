@@ -1,4 +1,4 @@
-#include "ota-mqtt.h"
+#include "ota-mqtt.hpp"
 
 #include <assert.h>
 #include <errno.h>
@@ -12,8 +12,8 @@ static void testValidCommand(void)
         "\"url\":\"https://example.com/update.swu\","
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
-    OtaState state = {0};
-    OtaMqttCommand command = {0};
+    OtaState state = {};
+    OtaMqttCommand command = {};
 
     assert(otaMqttParseCommandJson(jsonText, &state, &command) == 0);
     assert(strcmp(state.requestId, "req-42") == 0);
@@ -32,8 +32,8 @@ static void testValidEscapedSlashUrl(void)
         "\"url\":\"https:\\/\\/example.com\\/update.swu\","
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
-    OtaState state = {0};
-    OtaMqttCommand command = {0};
+    OtaState state = {};
+    OtaMqttCommand command = {};
 
     assert(otaMqttParseCommandJson(jsonText, &state, &command) == 0);
     assert(strcmp(command.url, "https://example.com/update.swu") == 0);
@@ -46,7 +46,7 @@ static void testRejectsInvalidUtf8InCommandString(void)
         "\"url\":\"https://example.com/update.swu\","
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
-    OtaState state = {0};
+    OtaState state = {};
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
@@ -60,7 +60,7 @@ static void testRejectsVerticalTabWhitespace(void)
         "\"url\":\"https://example.com/update.swu\","
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
-    OtaState state = {0};
+    OtaState state = {};
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
@@ -74,7 +74,7 @@ static void testRejectsTrailingGarbage(void)
         "\"url\":\"https://example.com/update.swu\","
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}garbage";
-    OtaState state = {0};
+    OtaState state = {};
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
@@ -87,7 +87,7 @@ static void testMissingField(void)
         "{\"requestId\":\"req-42\",\"version\":\"2.0.1\","
         "\"url\":\"https://example.com/update.swu\","
         "\"autoReboot\":false}";
-    OtaState state = {0};
+    OtaState state = {};
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
@@ -100,7 +100,7 @@ static void testInvalidSha256Length(void)
         "{\"requestId\":\"req-42\",\"version\":\"2.0.1\","
         "\"url\":\"https://example.com/update.swu\","
         "\"sha256\":\"abcd\",\"autoReboot\":false}";
-    OtaState state = {0};
+    OtaState state = {};
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
@@ -114,7 +114,7 @@ static void testInvalidBooleanToken(void)
         "\"url\":\"https://example.com/update.swu\","
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":truex}";
-    OtaState state = {0};
+    OtaState state = {};
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
@@ -128,7 +128,7 @@ static void testRejectsTrailingComma(void)
         "\"url\":\"https://example.com/update.swu\","
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":true,}";
-    OtaState state = {0};
+    OtaState state = {};
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
@@ -142,7 +142,7 @@ static void testRejectsMissingComma(void)
         "\"url\":\"https://example.com/update.swu\","
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
-    OtaState state = {0};
+    OtaState state = {};
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
@@ -156,7 +156,7 @@ static void testRejectsRequiredFieldInNestedObject(void)
         "\"url\":\"https://example.com/update.swu\","
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
-    OtaState state = {0};
+    OtaState state = {};
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
@@ -170,7 +170,7 @@ static void testRejectsRepeatedField(void)
         "\"version\":\"2.0.1\",\"url\":\"https://example.com/update.swu\","
         "\"sha256\":\"0123456789abcdef0123456789abcdef"
         "0123456789abcdef0123456789abcdef\",\"autoReboot\":true}";
-    OtaState state = {0};
+    OtaState state = {};
 
     errno = 0;
     assert(otaHandleCommandJson(jsonText, &state) == -1);
@@ -192,7 +192,7 @@ static void testRejectsTrailingBackslashEscape(void)
 
 static void testStatusPayload(void)
 {
-    OtaState state = {0};
+    OtaState state = {};
     char payload[512];
 
     (void)snprintf(state.requestId, sizeof(state.requestId), "%s", "req-42");
@@ -225,7 +225,7 @@ static void assertControlCharacterEscaped(unsigned char control,
 
 static void testStatusPayloadEscapesAllControlCharacters(void)
 {
-    OtaState nulState = {0};
+    OtaState nulState = {};
     char nulPayload[512];
     unsigned char control;
 
@@ -233,7 +233,7 @@ static void testStatusPayloadEscapesAllControlCharacters(void)
                                      sizeof(nulPayload)) == 0);
     assert(strstr(nulPayload, "\"detail\":\"\"") != NULL);
     for (control = 1; control <= 0x1f; ++control) {
-        OtaState state = {0};
+        OtaState state = {};
         char payload[512];
 
         state.detail[0] = (char)control;
@@ -244,7 +244,7 @@ static void testStatusPayloadEscapesAllControlCharacters(void)
 
 static void testStatusPayloadRejectsInvalidUtf8(void)
 {
-    OtaState state = {0};
+    OtaState state = {};
     char payload[512];
 
     state.detail[0] = (char)0x80;

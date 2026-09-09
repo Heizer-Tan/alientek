@@ -10,14 +10,16 @@ source "$root/scripts/kas-env.sh"
 
 fetch_only=0
 force_full=0
+menuconfig=0
 target=""
 tftp_dir="${TFTP_DIR:-}"
 forward_args=()
 
 print_usage() {
-  echo "用法: $0 [--fetch-only] [--full] [--tftp DIR] [--target RECIPE|RECIPE] [kas 额外参数...]" >&2
+  echo "用法: $0 [--fetch-only] [--full] [--menuconfig] [--tftp DIR] [--target RECIPE|RECIPE] [kas 额外参数...]" >&2
   echo "  --fetch-only     只检出层并下载源码，不编译" >&2
   echo "  --full           强制完整 kas 构建（关闭设备树快路径）" >&2
+  echo "  --menuconfig     打开 Linux kernel menuconfig，并导出配置片段" >&2
   echo "  --tftp DIR       设备树快路径时额外拷贝 dtb 到 DIR" >&2
   echo "  --target RECIPE  只编指定 recipe（覆盖 yml 里的镜像目标）" >&2
   echo "  RECIPE           同 --target RECIPE，例如: $0 key-monitor" >&2
@@ -39,6 +41,10 @@ parse_args() {
         ;;
       --full)
         force_full=1
+        shift
+        ;;
+      --menuconfig)
+        menuconfig=1
         shift
         ;;
       --tftp)
@@ -88,6 +94,24 @@ parse_args() {
         ;;
     esac
   done
+}
+
+validate_args() {
+  if [[ "$menuconfig" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "$fetch_only" -eq 1 ]]; then
+    echo "ERROR: --menuconfig 不能与 --fetch-only 同用" >&2
+    exit 1
+  fi
+  if [[ -n "$target" ]]; then
+    echo "ERROR: --menuconfig 不接受额外 target" >&2
+    exit 1
+  fi
+  if [[ -n "$tftp_dir" ]]; then
+    echo "ERROR: --menuconfig 不支持 --tftp" >&2
+    exit 1
+  fi
 }
 
 # 从 git porcelain 行取出路径（支持 rename: "old -> new"）
@@ -146,15 +170,16 @@ device_tree_newer_than_deployed_dtb() {
   return 1
 }
 
+is_git_worktree() {
+  git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
 # 仅设备树改动 → 走 build-dtb.sh
 should_fast_dtb() {
   if [[ "$force_full" -eq 1 || "$fetch_only" -eq 1 || -n "$target" ]]; then
     return 1
   fi
-  if ! git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    return 1
-  fi
-  if only_device_tree_git_dirty; then
+  if is_git_worktree && only_device_tree_git_dirty; then
     return 0
   fi
   # 无其它 BSP 改动，且 dts 比 deploy 的 dtb 新
@@ -177,6 +202,35 @@ run_fast_dtb() {
   exec "$root/scripts/build-dtb.sh" "${dtb_args[@]}"
 }
 
+run_kernel_menuconfig() {
+  local cmd
+
+  read -r -d '' cmd <<'EOF' || true
+bitbake virtual/kernel -c menuconfig &&
+bitbake -c diffconfig virtual/kernel &&
+bb_env="$(bitbake -e virtual/kernel)" &&
+workdir="$(printf '%s\n' "${bb_env}" | sed -n 's/^WORKDIR="\([^"]*\)"$/\1/p' | sed -n '1p')" &&
+topdir="$(printf '%s\n' "${bb_env}" | sed -n 's/^TOPDIR="\([^"]*\)"$/\1/p' | sed -n '1p')" &&
+fragment="${workdir}/fragment.cfg" &&
+# TOPDIR 即 Yocto build 目录（仓库根下的 build/），避免 kas 内 pwd 已是 build 时再拼一层
+exportPath="${topdir}/menuconfig/kernel.fragment.cfg" &&
+mkdir -p "$(dirname "${exportPath}")" &&
+if [ -f "${fragment}" ]; then
+  cp "${fragment}" "${exportPath}"
+  echo "INFO: 配置片段已导出到 ${exportPath}"
+else
+  echo "WARN: 未找到 ${fragment}，请在 kas shell 内手工执行 bitbake -c diffconfig virtual/kernel" >&2
+fi
+EOF
+
+  echo "INFO: 打开 Linux kernel menuconfig" >&2
+  echo "INFO: 退出后将尝试导出配置片段到 build/menuconfig/kernel.fragment.cfg" >&2
+  if kas_using_host; then
+    exec kas shell "$kas_yml" -c "$cmd"
+  fi
+  exec kas-container shell "$kas_yml" -c "$cmd"
+}
+
 # 把参数交给 kas；--fetch-only 转成 bitbake --runall=fetch
 run_kas() {
   local -a kas_cmd=("$@")
@@ -195,12 +249,17 @@ run_kas() {
 }
 
 parse_args "$@"
+validate_args
 
 if should_fast_dtb; then
   run_fast_dtb
 fi
 
 prepare_kas_env
+
+if [[ "$menuconfig" -eq 1 ]]; then
+  run_kernel_menuconfig
+fi
 
 if kas_using_host; then
   echo "INFO: pseudo/大小写问题若出现，再改回容器构建。" >&2

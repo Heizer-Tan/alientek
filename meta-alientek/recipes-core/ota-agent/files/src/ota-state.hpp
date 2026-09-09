@@ -1,7 +1,6 @@
-#ifndef OTA_STATE_H
-#define OTA_STATE_H
+#pragma once
 
-#include <stddef.h>
+#include <cstddef>
 
 typedef struct OtaState {
     char requestId[64];
@@ -15,10 +14,10 @@ typedef struct OtaState {
 
 int otaStateLoad(const char *path, OtaState *state);
 int otaStateSave(const char *path, const OtaState *state);
+int otaStateLoadFromEnvironment(OtaState *state);
+int otaStateSaveToEnvironment(const OtaState *state);
 int otaStateAcquireLock(const char *lockPath);
 void otaStateReleaseLock(int lockFd, const char *lockPath);
 int otaStateRequestSeen(const OtaState *state, const char *requestId);
 int otaStateSetResult(OtaState *state, const char *phase,
                       const char *result, const char *detail);
-
-#endif

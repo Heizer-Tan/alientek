@@ -1,9 +1,8 @@
-#ifndef OTA_MQTT_H
-#define OTA_MQTT_H
+#pragma once
 
-#include "ota-state.h"
+#include "ota-state.hpp"
 
-#include <stddef.h>
+#include <cstddef>
 
 typedef struct OtaMqttCommand {
     char url[512];
@@ -20,5 +19,3 @@ int otaMqttBuildStatusPayload(const OtaState *state, char *payload,
                               size_t payloadSize);
 int otaReportCommittedState(const OtaState *state);
 int otaReportFailureState(const OtaState *state, const char *reason);
-
-#endif

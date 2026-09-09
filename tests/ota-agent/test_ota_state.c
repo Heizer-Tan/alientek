@@ -1,4 +1,4 @@
-#include "ota-state.h"
+#include "ota-state.hpp"
 
 #include <assert.h>
 #include <errno.h>

@@ -6,11 +6,13 @@ LIC_FILES_CHKSUM = "file://ap3216c.c;beginline=1;endline=1;md5=a9f1449b768f69dcf
 inherit module
 
 SRC_URI = " \
-    file://ap3216c.c \
-    file://Makefile \
+    file://ap3216c.c;subdir=src \
+    file://Makefile;subdir=src \
 "
 
-S = "${WORKDIR}"
+# file:// 本地源码统一解到 ${WORKDIR}/src，避免直接使用 WORKDIR 根目录。
+S = "${WORKDIR}/src"
+B = "${S}"
 
 # 直接绑定到已准备好的内核 build 目录，避免依赖外层 O= 透传
 EXTRA_OEMAKE += "KERNELDIR=${STAGING_KERNEL_BUILDDIR}"

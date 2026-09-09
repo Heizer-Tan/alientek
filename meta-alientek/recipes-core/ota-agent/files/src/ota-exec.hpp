@@ -1,9 +1,8 @@
-#ifndef OTA_EXEC_H
-#define OTA_EXEC_H
+#pragma once
 
-#include "ota-state.h"
+#include "ota-state.hpp"
 
-#include <stddef.h>
+#include <cstddef>
 
 int otaCheckUpgradeAllowed(char *errorBuf, size_t errorBufSize);
 int otaPrepareTargetSlot(OtaState *state, char *errorBuf, size_t errorBufSize);
@@ -11,5 +10,3 @@ int otaRecoverPendingState(OtaState *state);
 int otaRunUpgrade(const char *swuPath, int autoReboot,
                   char *errorBuf, size_t errorBufSize);
 int otaReadCurrentVersion(char *versionBuf, size_t versionBufSize);
-
-#endif

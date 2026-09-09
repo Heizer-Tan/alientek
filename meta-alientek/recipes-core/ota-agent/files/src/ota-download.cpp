@@ -1,4 +1,4 @@
-#include "ota-download.h"
+#include "ota-download.hpp"
 
 #include <ctype.h>
 #include <errno.h>
@@ -47,9 +47,10 @@ int otaDownloadPackage(const char *url, const char *outputPath,
                        char *errorBuf, size_t errorBufSize)
 {
     pid_t pid;
-    char *const args[] = {"curl", "--fail", "--location", "--silent",
-                          "--show-error", "--output", (char *)outputPath,
-                          "--", (char *)url, NULL};
+    char *const args[] = {(char *)"curl", (char *)"--fail",
+                          (char *)"--location", (char *)"--silent",
+                          (char *)"--show-error", (char *)"--output",
+                          (char *)outputPath, (char *)"--", (char *)url, NULL};
 
     if (url == NULL || url[0] == '\0' ||
         outputPath == NULL || outputPath[0] == '\0') {

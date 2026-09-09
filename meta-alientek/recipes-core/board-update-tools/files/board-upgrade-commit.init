@@ -33,6 +33,10 @@ commitSlot() {
     fw_setenv bootcount 0
     fw_setenv upgrade_available 0
     fw_setenv last_good_slot "${activeSlot}"
+    fw_setenv ota_target_slot "${activeSlot}"
+    fw_setenv ota_phase committed
+    fw_setenv ota_result success
+    fw_setenv ota_detail "升级已提交"
     logMsg "已提交槽位 ${activeSlot}"
 }
 

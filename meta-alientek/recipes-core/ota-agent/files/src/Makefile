@@ -1,12 +1,12 @@
-CC ?= gcc
-CFLAGS ?= -O2 -Wall -Wextra
+CXX ?= g++
+CXXFLAGS ?= -O2 -Wall -Wextra -std=c++17
 LDFLAGS ?=
 
-SOURCES = ota-agent.c ota-state.c ota-download.c ota-exec.c ota-mqtt.c
-HEADERS = ota-agent.h ota-state.h ota-download.h ota-exec.h ota-mqtt.h
+SOURCES = ota-agent.cpp ota-state.cpp ota-download.cpp ota-exec.cpp ota-mqtt.cpp
+HEADERS = ota-agent.hpp ota-state.hpp ota-download.hpp ota-exec.hpp ota-mqtt.hpp
 
 ota-agent: $(SOURCES) $(HEADERS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SOURCES)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(SOURCES)
 
 .PHONY: clean
 

@@ -1,4 +1,4 @@
-#include "ota-mqtt.h"
+#include "ota-mqtt.hpp"
 
 #include <ctype.h>
 #include <errno.h>
@@ -412,8 +412,8 @@ static int validateCommand(const OtaMqttCommand *command)
 int otaMqttParseCommandJson(const char *jsonText, OtaState *state,
                             OtaMqttCommand *command)
 {
-    OtaState parsedState = {0};
-    OtaMqttCommand parsedCommand = {0};
+    OtaState parsedState = {};
+    OtaMqttCommand parsedCommand = {};
 
     if (jsonText == NULL || state == NULL || command == NULL) {
         return failWithErrno(EINVAL);

@@ -5,16 +5,16 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 RDEPENDS:${PN} = "curl coreutils board-update-tools"
 
 SRC_URI = " \
-    file://src/ota-agent.c \
-    file://src/ota-agent.h \
-    file://src/ota-state.c \
-    file://src/ota-state.h \
-    file://src/ota-download.c \
-    file://src/ota-download.h \
-    file://src/ota-exec.c \
-    file://src/ota-exec.h \
-    file://src/ota-mqtt.c \
-    file://src/ota-mqtt.h \
+    file://src/ota-agent.cpp \
+    file://src/ota-agent.hpp \
+    file://src/ota-state.cpp \
+    file://src/ota-state.hpp \
+    file://src/ota-download.cpp \
+    file://src/ota-download.hpp \
+    file://src/ota-exec.cpp \
+    file://src/ota-exec.hpp \
+    file://src/ota-mqtt.cpp \
+    file://src/ota-mqtt.hpp \
     file://src/Makefile \
     file://ota-agent.init \
     file://ota-agent.default \

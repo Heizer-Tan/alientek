@@ -1,4 +1,4 @@
-#include "ota-exec.h"
+#include "ota-exec.hpp"
 
 #include <ctype.h>
 #include <errno.h>
@@ -160,8 +160,8 @@ int otaCheckUpgradeAllowed(char *errorBuf, size_t errorBufSize)
 int otaRunUpgrade(const char *swuPath, int autoReboot,
                   char *errorBuf, size_t errorBufSize)
 {
-    char *normalArgs[] = {"board-apply-update", (char *)swuPath, NULL};
-    char *rebootArgs[] = {"board-apply-update", "--reboot",
+    char *normalArgs[] = {(char *)"board-apply-update", (char *)swuPath, NULL};
+    char *rebootArgs[] = {(char *)"board-apply-update", (char *)"--reboot",
                           (char *)swuPath, NULL};
 
     if (swuPath == NULL || swuPath[0] == '\0') {
