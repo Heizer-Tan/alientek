@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+//
+// Copyright (C) 2016 Freescale Semiconductor, Inc.
+// U-Boot 板级 DTS：在通用板级 dtsi 之上叠加 U-Boot 专用网口裁剪
+
+/dts-v1/;
+
+#include "imx6ull.dtsi"
+#include "imx6ull-alientek-alpha.dtsi"
+#include "imx6ull-alientek-alpha-u-boot.dtsi"
+
+/ {
+	model = "ALIENTEK i.MX6ULL Alpha";
+	compatible = "fsl,imx6ull-14x14-evk", "fsl,imx6ull";
+};
+
+&clks {
+	assigned-clocks = <&clks IMX6UL_CLK_PLL3_PFD2>,
+			  <&clks IMX6UL_CLK_PLL4_AUDIO_DIV>;
+	assigned-clock-rates = <320000000>, <786432000>;
+};
+
+&usdhc2 {
+	pinctrl-names = "default", "state_100mhz", "state_200mhz";
+	pinctrl-0 = <&pinctrl_usdhc2_8bit>;
+	pinctrl-1 = <&pinctrl_usdhc2_8bit_100mhz>;
+	pinctrl-2 = <&pinctrl_usdhc2_8bit_200mhz>;
+	bus-width = <8>;
+	non-removable;
+	status = "okay";
+};

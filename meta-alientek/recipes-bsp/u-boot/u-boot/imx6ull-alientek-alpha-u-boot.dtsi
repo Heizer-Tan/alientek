@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: GPL-2.0
+// 仅 U-Boot 使用：关掉 ENET2，避免 shared MDIO data abort；
+// Linux 仍用完整板级 dtsi（双网口，board-network 用 eth1）。
+
+&fec2 {
+	status = "disabled";
+};
+
+&fec1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_enet1 &pinctrl_enet1_reset>;
+	phy-mode = "rmii";
+	phy-handle = <&uboot_ethphy>;
+	phy-supply = <&reg_peri_3v3>;
+	status = "okay";
+
+	mdio {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		uboot_ethphy: ethernet-phy@2 {
+			compatible = "ethernet-phy-id0022.1560";
+			reg = <2>;
+			micrel,led-mode = <1>;
+			clocks = <&clks IMX6UL_CLK_ENET_REF>;
+			clock-names = "rmii-ref";
+		};
+	};
+};

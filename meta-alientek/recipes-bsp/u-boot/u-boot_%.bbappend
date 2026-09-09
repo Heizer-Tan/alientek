@@ -4,6 +4,7 @@ SRC_URI += " \
     file://mx6ull_aes_defconfig \
     file://imx6ull-alientek-alpha.dts \
     file://imx6ull-alientek-alpha.dtsi \
+    file://imx6ull-alientek-alpha-u-boot.dtsi \
     file://boot.cmd \
 "
 
@@ -12,12 +13,14 @@ do_configure:prepend() {
     src_def="${WORKDIR}/mx6ull_aes_defconfig"
     src_dts="${WORKDIR}/imx6ull-alientek-alpha.dts"
     src_dtsi="${WORKDIR}/imx6ull-alientek-alpha.dtsi"
-    if [ ! -f "${src_def}" ] || [ ! -f "${src_dts}" ] || [ ! -f "${src_dtsi}" ]; then
+    src_uboot_dtsi="${WORKDIR}/imx6ull-alientek-alpha-u-boot.dtsi"
+    if [ ! -f "${src_def}" ] || [ ! -f "${src_dts}" ] || [ ! -f "${src_dtsi}" ] || [ ! -f "${src_uboot_dtsi}" ]; then
         die "未找到阿尔法 U-Boot defconfig 或板级 dts（WORKDIR=${WORKDIR}）"
     fi
     install -D -m 0644 "${src_def}" ${S}/configs/mx6ull_aes_defconfig
     install -D -m 0644 "${src_dts}" ${S}/arch/arm/dts/imx6ull-alientek-alpha.dts
     install -D -m 0644 "${src_dtsi}" ${S}/arch/arm/dts/imx6ull-alientek-alpha.dtsi
+    install -D -m 0644 "${src_uboot_dtsi}" ${S}/arch/arm/dts/imx6ull-alientek-alpha-u-boot.dtsi
     mk="${S}/arch/arm/dts/Makefile"
     if [ ! -f "${mk}" ]; then
         die "未找到 ${mk}，u-boot DTS 布局已变"

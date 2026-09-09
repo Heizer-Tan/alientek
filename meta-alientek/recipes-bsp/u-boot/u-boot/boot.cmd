@@ -22,9 +22,11 @@ setenv mmcargs 'run select_slot; setenv rootdev /dev/mmcblk${mmcdev}p${rootpart}
 setenv rollback_slot 'if test "${active_slot}" = "B"; then setenv active_slot A; else setenv active_slot B; fi; setenv upgrade_available 0; setenv bootcount 0; saveenv'
 setenv mmcboot "echo Booting from MMC slot ${active_slot}...; run mmcargs; fatload mmc ${mmcdev}:${mmcpart} ${loadaddr} zImage; fatload mmc ${mmcdev}:${mmcpart} ${fdt_addr_r} ${fdtfile}; bootz ${loadaddr} - ${fdt_addr_r}"
 
-# 方案 A：内核/DTB 走 TFTP，根文件系统走 NFS；网口固定 eth1
+# 方案 A：内核/DTB 走 TFTP，根文件系统走 NFS
+# U-Boot 仅启用 ENET1（fec1@2188000→eth0）；Linux NFS 根仍用 eth1
+# 无 MAC 时补实验室本地管理地址；已有 ethaddr 不覆盖
 setenv netargs "setenv bootargs console=${console} root=/dev/nfs rw nfsroot=${serverip}:${nfsroot},nfsvers=3,tcp ip=${ipaddr}:${serverip}:${gatewayip}:${netmask}::eth1:off"
-setenv netboot "echo Booting from NFS...; run netargs; tftp ${loadaddr} zImage; tftp ${fdt_addr_r} ${fdtfile}; bootz ${loadaddr} - ${fdt_addr_r}"
+setenv netboot 'echo Booting from NFS...; if test -z "${ethaddr}"; then setenv ethaddr 02:11:22:33:44:56; fi; setenv ethprime eth0; setenv ethact eth0; run netargs; tftp ${loadaddr} zImage; tftp ${fdt_addr_r} ${fdtfile}; bootz ${loadaddr} - ${fdt_addr_r}'
 
 # 启动菜单：记住上次选择；首次默认 TF
 if test -z "${boot_mode}"; then setenv boot_mode mmc; fi

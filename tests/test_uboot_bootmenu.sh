@@ -37,4 +37,8 @@ esac
 grep -q 'test -z "${bootmenu_default}"' "${bootcmd}"
 grep -q 'test -z "${boot_mode}"' "${bootcmd}"
 
+grep -q 'setenv ethact eth0' "${bootcmd}"
+grep -q 'setenv ethprime eth0' "${bootcmd}"
+grep -q 'ethaddr' "${bootcmd}"
+
 echo "uboot bootmenu script constraints ok"
