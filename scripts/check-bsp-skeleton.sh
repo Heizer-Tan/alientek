@@ -112,7 +112,8 @@ fi
 cfg="$root/meta-alientek/recipes-kernel/linux/linux/nfs.cfg"
 if [[ -f "$cfg" ]]; then
   grep -q "CONFIG_ROOT_NFS=y" "$cfg" || fail "nfs.cfg 缺少 CONFIG_ROOT_NFS"
-  grep -q "CONFIG_IP_PNP_DHCP=y" "$cfg" || fail "nfs.cfg 缺少 CONFIG_IP_PNP_DHCP"
+  grep -q "CONFIG_IP_PNP=y" "$cfg" || fail "nfs.cfg 缺少 CONFIG_IP_PNP"
+  grep -q "# CONFIG_IP_PNP_DHCP is not set" "$cfg" || fail "nfs.cfg 应关闭 CONFIG_IP_PNP_DHCP（强制静态 IP）"
 fi
 
 if [[ "${FULL:-1}" == "1" ]]; then

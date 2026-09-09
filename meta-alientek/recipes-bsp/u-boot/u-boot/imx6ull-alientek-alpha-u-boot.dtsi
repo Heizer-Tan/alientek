@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-// 仅 U-Boot：固定 eth0/eth1 对应关系，并给 LAN8720 补复位脚。
-// Linux 仍用完整板级 dtsi；不要在这里关掉 fec2（MDIO 在 ENET2 引脚上）。
+// 仅 U-Boot：与板级 dtsi 一致的 eth 别名，并给 LAN8720 补复位脚。
+// 不要关掉 fec2（MDIO 在 ENET2 引脚上）。
 
 / {
 	aliases {

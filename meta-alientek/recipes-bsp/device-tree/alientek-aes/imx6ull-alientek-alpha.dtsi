@@ -9,9 +9,15 @@
 		stdout-path = &uart1;
 	};
 
-	/* 板载纽扣电池给片内 SNVS RTC 供电，rtc0 直接指向 snvs_rtc */
+	/*
+	 * 板载纽扣电池给片内 SNVS RTC 供电，rtc0 直接指向 snvs_rtc。
+	 * 网口统一：eth0 = ENET2(fec2@20b4000) 实验室主网口（实测可通，且为 MDIO 宿主）；
+	 * eth1 = ENET1(fec1@2188000) 第二口。U-Boot/Linux 共用此别名。
+	 */
 	aliases {
 		rtc0 = &snvs_rtc;
+		ethernet0 = &fec2;
+		ethernet1 = &fec1;
 	};
 
 	memory@80000000 {
@@ -299,6 +305,9 @@
 	phy-mode = "rmii";
 	phy-handle = <&ethphy0>;
 	phy-supply = <&reg_peri_3v3>;
+	phy-reset-gpios = <&gpio5 7 GPIO_ACTIVE_LOW>;
+	phy-reset-duration = <25>;
+	phy-reset-post-delay = <100>;
 	status = "okay";
 };
 
@@ -308,6 +317,9 @@
 	phy-mode = "rmii";
 	phy-handle = <&ethphy1>;
 	phy-supply = <&reg_peri_3v3>;
+	phy-reset-gpios = <&gpio5 8 GPIO_ACTIVE_LOW>;
+	phy-reset-duration = <25>;
+	phy-reset-post-delay = <100>;
 	status = "okay";
 
 	mdio {

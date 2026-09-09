@@ -234,7 +234,7 @@ hwclock -w                        # 首次校时后写回 RTC
 
 ## 本地启动网络
 
-本地 MMC 启动场景下，镜像默认安装 `board-network`，在开机时为 `eth1` 配置静态地址 `192.168.5.201/24`、默认网关 `192.168.5.1`，并写入 DNS `223.5.5.5`、`119.29.29.29`。现场可修改 `etc/default/board-network` 后重启或执行 `/etc/init.d/board-network restart` 生效。
+本地 MMC 启动场景下，镜像默认安装 `board-network`，在开机时为 `eth0`（ENET2 / `fec2@20b4000`）配置静态地址 `192.168.5.201/24`、默认网关 `192.168.5.1`，并写入 DNS `223.5.5.5`、`119.29.29.29`。U-Boot TFTP/NFS 与 Linux 共用该口，实验室网线只插 ENET2。现场可修改 `etc/default/board-network` 后重启或执行 `/etc/init.d/board-network restart` 生效。
 
 ## NFS 启动（netboot，调试入口）
 
@@ -256,7 +256,7 @@ sudo ./scripts/export-nfs-tftp.sh \
 
 `sudo exportfs -ra`，并启动 tftpd 与 nfs-server。
 
-3. 板端与 PC 同一网段。当前 `boot.cmd` 保留 `run netboot` 作为调试入口（静态 IP + eth1），示例：
+3. 板端与 PC 同一网段，网线插 ENET2（`ethernet@20b4000`）。当前 `boot.cmd` 保留 `run netboot` 作为调试入口（静态 IP + eth0，禁止 DHCP），示例：
 
 ```
 setenv serverip 192.168.5.27
