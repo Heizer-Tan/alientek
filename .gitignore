@@ -8,5 +8,8 @@
 /poky/
 /meta-freescale/
 /meta-openembedded/
+meta-swupdate/
+/docs/
+.venv-pdf/
 *.pyc
 __pycache__/
