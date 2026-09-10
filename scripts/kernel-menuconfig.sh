@@ -13,7 +13,7 @@ print_usage() {
   echo "  打开 menuconfig；退出保存后自动导出差异片段到" >&2
   echo "  build/menuconfig/kernel.fragment.cfg" >&2
   echo "  请在仓库外的真实终端运行，不要在已有 kas-container shell 里再套一层。" >&2
-  echo "  导出片段需手工并入 kernel recipe 的 SRC_URI 才会持久生效。" >&2
+  echo "  导出片段需手工并入 meta-alientek/recipes-kernel/linux/linux/nfs.cfg 才会持久生效。" >&2
 }
 
 require_tty() {
@@ -81,7 +81,7 @@ EOF
 
   echo "INFO: 打开 Linux kernel menuconfig" >&2
   echo "INFO: 退出保存后将导出差异片段到 build/menuconfig/kernel.fragment.cfg" >&2
-  echo "INFO: 该片段不会自动写回 recipe；需要时请手工并入 SRC_URI" >&2
+  echo "INFO: 该片段不会自动写回 recipe；需要时请手工并入 linux/nfs.cfg" >&2
   if kas_using_host; then
     exec kas shell "$kas_yml" -c "$cmd"
   fi

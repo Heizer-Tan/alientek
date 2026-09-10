@@ -9,13 +9,9 @@ LINUX_VERSION = "7.2.4"
 PV = "${LINUX_VERSION}"
 LOCALVERSION = "-alientek"
 
-# 官方路径：${KERNELORG_MIRROR}/linux/kernel/v7.x/...
-# 清华实际是 /kernel/v7.x/（无 linux/ 段）；在 kas 里用 MIRRORS 改写
-SRC_URI = "${KERNELORG_MIRROR}/linux/kernel/v7.x/linux-${PV}.tar.xz \
-    file://nfs.cfg \
-    file://imx6ull-alientek-alpha.dts \
-    file://imx6ull-alientek-alpha.dtsi \
-"
+# 仅远端内核源码进 SRC_URI。板级 nfs.cfg / DTS 不放 SRC_URI，
+# 否则改一处本地文件会让 do_unpack 重新解开整包 tar.xz。
+SRC_URI = "${KERNELORG_MIRROR}/linux/kernel/v7.x/linux-${PV}.tar.xz"
 SRC_URI[sha256sum] = "01710ee01737dac492f1bae52becd057e08d20d11589089aa06accff415c28dd"
 
 S = "${WORKDIR}/linux-${PV}"
@@ -24,9 +20,18 @@ COMPATIBLE_MACHINE = "imx6ull-alientek-alpha"
 KBUILD_DEFCONFIG = "imx_v6_v7_defconfig"
 KCONFIG_MODE = "--alldefconfig"
 
-FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:${THISDIR}/../../recipes-bsp/device-tree/alientek-aes:"
-
 KERNEL_EXTRA_ARGS += "LOADADDR=${UBOOT_ENTRYPOINT}"
+
+# 层内路径：改这些文件只失效 do_configure（及后续），不碰 unpack
+ALIENTK_NFS_CFG = "${THISDIR}/${PN}/nfs.cfg"
+ALIENTK_DTS = "${THISDIR}/../../recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dts"
+ALIENTK_DTSI = "${THISDIR}/../../recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dtsi"
+
+do_configure[file-checksums] += "\
+    ${ALIENTK_NFS_CFG}:True \
+    ${ALIENTK_DTS}:True \
+    ${ALIENTK_DTSI}:True \
+"
 
 do_configure:prepend() {
     # 拷板级 AES DTS；若无 imx_v6_v7_defconfig 则回退 multi_v7
@@ -39,8 +44,8 @@ do_configure:prepend() {
     fi
 
     dts_dir="${S}/arch/arm/boot/dts/nxp/imx"
-    install -D -m 0644 ${WORKDIR}/imx6ull-alientek-alpha.dts ${dts_dir}/imx6ull-alientek-alpha.dts
-    install -D -m 0644 ${WORKDIR}/imx6ull-alientek-alpha.dtsi ${dts_dir}/imx6ull-alientek-alpha.dtsi
+    install -D -m 0644 ${ALIENTK_DTS} ${dts_dir}/imx6ull-alientek-alpha.dts
+    install -D -m 0644 ${ALIENTK_DTSI} ${dts_dir}/imx6ull-alientek-alpha.dtsi
     mk="${dts_dir}/Makefile"
     if [ ! -f "${mk}" ]; then
         die "未找到 ${mk}，Linux 7.2 DTS 布局已变"
@@ -52,7 +57,7 @@ do_configure:prepend() {
 }
 
 do_configure:append() {
-    if [ -f ${WORKDIR}/nfs.cfg ]; then
-        ${S}/scripts/kconfig/merge_config.sh -m -O ${B} ${B}/.config ${WORKDIR}/nfs.cfg
+    if [ -f ${ALIENTK_NFS_CFG} ]; then
+        ${S}/scripts/kconfig/merge_config.sh -m -O ${B} ${B}/.config ${ALIENTK_NFS_CFG}
     fi
 }
