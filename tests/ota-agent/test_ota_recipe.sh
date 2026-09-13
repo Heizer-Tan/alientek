@@ -17,8 +17,13 @@ done
 grep -q 'ota-agent' "${image}"
 grep -q 'inherit update-rc.d' "${recipe}"
 grep -q 'INITSCRIPT_NAME = "ota-agent"' "${recipe}"
-if ! grep -q 'RDEPENDS:${PN} = "curl coreutils board-update-tools"' "${recipe}"; then
-    echo "expected: coreutils provides sha256sum without a standalone package" >&2
+if ! grep -q 'paho-mqtt-c' "${recipe}"; then
+    echo "expected: ota-agent depends on paho-mqtt-c for MQTT transport" >&2
+    exit 1
+fi
+if ! grep -q 'RDEPENDS:${PN} = "curl coreutils board-update-tools paho-mqtt-c"' \
+    "${recipe}"; then
+    echo "expected: coreutils provides sha256sum; paho-mqtt-c for MQTT" >&2
     exit 1
 fi
 grep -q '${bindir}/ota-agent' "${recipe}"

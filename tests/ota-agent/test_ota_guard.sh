@@ -70,7 +70,9 @@ chmod +x "${mockBin}/curl" "${mockBin}/fw_printenv" \
     "${mockBin}/board-apply-update" "${mockBin}/fw_setenv"
 
 make -C "${sourceDir}" clean >/dev/null
-make -C "${sourceDir}" CXXFLAGS='-O2 -Wall -Wextra -Werror -std=c++17' >/dev/null
+make -C "${sourceDir}" \
+    OTA_MQTT_BACKEND=stub \
+    CXXFLAGS='-O2 -Wall -Wextra -Werror -std=c++17' >/dev/null
 
 runAgent() {
     MOCK_PACKAGE="${tempDir}/package.swu" \

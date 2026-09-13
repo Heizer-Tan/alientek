@@ -554,6 +554,288 @@ int otaMqttBuildStatusPayload(const OtaState *state, char *payload,
     return 0;
 }
 
+#if defined(OTA_MQTT_BACKEND_PAHO)
+
+#include "MQTTClient.h"
+
+#include <unistd.h>
+
+enum {
+    OTA_MQTT_PENDING_CAPACITY = 4096,
+    OTA_MQTT_KEEPALIVE_SEC = 20,
+    OTA_MQTT_QOS = 1,
+    OTA_MQTT_PUBLISH_TIMEOUT_MS = 5000
+};
+
+static MQTTClient g_mqttClient = NULL;
+static int g_mqttConnected = 0;
+static int g_mqttHasPending = 0;
+static char g_mqttPending[OTA_MQTT_PENDING_CAPACITY];
+static char g_mqttServerUri[160];
+static char g_mqttClientId[96];
+static char g_mqttCommandTopic[192];
+
+static void clearMqttPending(void)
+{
+    g_mqttHasPending = 0;
+    g_mqttPending[0] = '\0';
+}
+
+static void onMqttConnectionLost(void *context, char *cause)
+{
+    (void)context;
+    g_mqttConnected = 0;
+    fprintf(stderr, "MQTT 连接断开: %s\n",
+            cause == NULL ? "(unknown)" : cause);
+}
+
+static int storeMqttPendingPayload(const void *payload, int payloadLength)
+{
+    if (payload == NULL || payloadLength < 1 ||
+        (size_t)payloadLength >= sizeof(g_mqttPending)) {
+        errno = EMSGSIZE;
+        return -1;
+    }
+    if (g_mqttHasPending != 0) {
+        fprintf(stderr, "丢弃 MQTT 命令：上一命令尚未处理\n");
+        errno = EBUSY;
+        return -1;
+    }
+    memcpy(g_mqttPending, payload, (size_t)payloadLength);
+    g_mqttPending[payloadLength] = '\0';
+    g_mqttHasPending = 1;
+    return 0;
+}
+
+static int onMqttMessageArrived(void *context, char *topicName, int topicLen,
+                                MQTTClient_message *message)
+{
+    (void)context;
+    (void)topicLen;
+    if (message != NULL) {
+        (void)storeMqttPendingPayload(message->payload, message->payloadlen);
+    }
+    MQTTClient_freeMessage(&message);
+    MQTTClient_free(topicName);
+    return 1;
+}
+
+static int validateMqttEndpoint(const char *host, int port,
+                                const char *clientId)
+{
+    if (host == NULL || host[0] == '\0' || port < 1 || port > 65535 ||
+        clientId == NULL || clientId[0] == '\0') {
+        return failWithErrno(EINVAL);
+    }
+    return 0;
+}
+
+static int buildMqttServerUri(const char *host, int port)
+{
+    int written = snprintf(g_mqttServerUri, sizeof(g_mqttServerUri),
+                           "tcp://%s:%d", host, port);
+
+    if (written < 0 || (size_t)written >= sizeof(g_mqttServerUri)) {
+        return failWithErrno(ENAMETOOLONG);
+    }
+    return 0;
+}
+
+static void destroyMqttClient(void)
+{
+    if (g_mqttClient == NULL) {
+        return;
+    }
+    if (g_mqttConnected != 0) {
+        (void)MQTTClient_disconnect(g_mqttClient, 1000);
+        g_mqttConnected = 0;
+    }
+    MQTTClient_destroy(&g_mqttClient);
+    g_mqttClient = NULL;
+}
+
+static int createMqttClient(void)
+{
+    int createResult;
+
+    destroyMqttClient();
+    createResult = MQTTClient_create(&g_mqttClient, g_mqttServerUri,
+                                     g_mqttClientId,
+                                     MQTTCLIENT_PERSISTENCE_NONE, NULL);
+    if (createResult != MQTTCLIENT_SUCCESS) {
+        return failWithErrno(EIO);
+    }
+    if (MQTTClient_setCallbacks(g_mqttClient, NULL, onMqttConnectionLost,
+                                onMqttMessageArrived, NULL) !=
+        MQTTCLIENT_SUCCESS) {
+        destroyMqttClient();
+        return failWithErrno(EIO);
+    }
+    return 0;
+}
+
+static int attemptMqttConnect(void)
+{
+    MQTTClient_connectOptions options = MQTTClient_connectOptions_initializer;
+    int connectResult;
+
+    if (g_mqttClient == NULL) {
+        return failWithErrno(EINVAL);
+    }
+    options.keepAliveInterval = OTA_MQTT_KEEPALIVE_SEC;
+    options.cleansession = 1;
+    connectResult = MQTTClient_connect(g_mqttClient, &options);
+    if (connectResult != MQTTCLIENT_SUCCESS) {
+        g_mqttConnected = 0;
+        return failWithErrno(ECONNREFUSED);
+    }
+    g_mqttConnected = 1;
+    return 0;
+}
+
+static int resubscribeCommandTopic(void)
+{
+    if (g_mqttCommandTopic[0] == '\0') {
+        return 0;
+    }
+    if (MQTTClient_subscribe(g_mqttClient, g_mqttCommandTopic, OTA_MQTT_QOS) !=
+        MQTTCLIENT_SUCCESS) {
+        return failWithErrno(EIO);
+    }
+    return 0;
+}
+
+int otaMqttConnect(const char *host, int port, const char *clientId)
+{
+    if (validateMqttEndpoint(host, port, clientId) != 0 ||
+        buildMqttServerUri(host, port) != 0) {
+        return -1;
+    }
+    {
+        int written = snprintf(g_mqttClientId, sizeof(g_mqttClientId), "%s",
+                               clientId);
+
+        if (written < 0 || (size_t)written >= sizeof(g_mqttClientId)) {
+            return failWithErrno(ENAMETOOLONG);
+        }
+    }
+    clearMqttPending();
+    if (createMqttClient() != 0) {
+        return -1;
+    }
+    if (attemptMqttConnect() != 0) {
+        /* 保留 client，供 yield 后台重连。 */
+        return -1;
+    }
+    return 0;
+}
+
+int otaMqttSubscribeCommand(const char *topic)
+{
+    if (topic == NULL || topic[0] == '\0') {
+        return failWithErrno(EINVAL);
+    }
+    if (snprintf(g_mqttCommandTopic, sizeof(g_mqttCommandTopic), "%s",
+                 topic) < 0) {
+        return failWithErrno(ENAMETOOLONG);
+    }
+    if (g_mqttConnected == 0) {
+        return failWithErrno(ENOTCONN);
+    }
+    return resubscribeCommandTopic();
+}
+
+int otaMqttPublishStatus(const char *topic, const char *payload)
+{
+    MQTTClient_message message = MQTTClient_message_initializer;
+    MQTTClient_deliveryToken token;
+    int publishResult;
+
+    if (topic == NULL || topic[0] == '\0' ||
+        payload == NULL || payload[0] == '\0') {
+        return failWithErrno(EINVAL);
+    }
+    if (g_mqttConnected == 0 || g_mqttClient == NULL) {
+        return failWithErrno(ENOTCONN);
+    }
+    message.payload = (void *)payload;
+    message.payloadlen = (int)strlen(payload);
+    message.qos = OTA_MQTT_QOS;
+    message.retained = 0;
+    publishResult = MQTTClient_publishMessage(g_mqttClient, topic, &message,
+                                              &token);
+    if (publishResult != MQTTCLIENT_SUCCESS) {
+        return failWithErrno(EIO);
+    }
+    if (MQTTClient_waitForCompletion(g_mqttClient, token,
+                                     OTA_MQTT_PUBLISH_TIMEOUT_MS) !=
+        MQTTCLIENT_SUCCESS) {
+        return failWithErrno(ETIMEDOUT);
+    }
+    return 0;
+}
+
+static int reconnectMqttIfNeeded(void)
+{
+    if (g_mqttConnected != 0) {
+        return 0;
+    }
+    if (g_mqttClient == NULL) {
+        if (g_mqttServerUri[0] == '\0' || g_mqttClientId[0] == '\0') {
+            return failWithErrno(EINVAL);
+        }
+        if (createMqttClient() != 0) {
+            return -1;
+        }
+    }
+    if (attemptMqttConnect() != 0) {
+        return -1;
+    }
+    return resubscribeCommandTopic();
+}
+
+int otaMqttYield(int timeoutMs)
+{
+    if (timeoutMs < 0) {
+        return failWithErrno(EINVAL);
+    }
+    if (g_mqttClient == NULL && g_mqttServerUri[0] == '\0') {
+        return failWithErrno(EINVAL);
+    }
+    (void)reconnectMqttIfNeeded();
+    if (g_mqttClient != NULL) {
+        MQTTClient_yield();
+    }
+    /* 未连上时 yield 几乎立即返回，用 timeout 做重连节流。 */
+    if (g_mqttConnected == 0 && timeoutMs > 0) {
+        usleep((useconds_t)timeoutMs * 1000U);
+    }
+    return 0;
+}
+
+int otaMqttPopCommand(char *buffer, size_t bufferSize)
+{
+    size_t pendingLength;
+
+    if (buffer == NULL || bufferSize == 0) {
+        return failWithErrno(EINVAL);
+    }
+    if (g_mqttHasPending == 0) {
+        return failWithErrno(EAGAIN);
+    }
+    pendingLength = strlen(g_mqttPending);
+    if (pendingLength + 1 > bufferSize) {
+        return failWithErrno(ENOSPC);
+    }
+    memcpy(buffer, g_mqttPending, pendingLength + 1);
+    clearMqttPending();
+    return 0;
+}
+
+#else /* OTA_MQTT_BACKEND_STUB */
+
+#include <unistd.h>
+
 int otaMqttConnect(const char *host, int port, const char *clientId)
 {
     if (host == NULL || host[0] == '\0' || port < 1 || port > 65535 ||
@@ -585,6 +867,31 @@ int otaMqttPublishStatus(const char *topic, const char *payload)
     errno = ENOSYS;
     return -1;
 }
+
+int otaMqttYield(int timeoutMs)
+{
+    if (timeoutMs < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    /* stub 无真实收包，仅节流主循环，避免 pause 被信号打断后空转。 */
+    if (timeoutMs > 0) {
+        usleep((useconds_t)timeoutMs * 1000U);
+    }
+    return 0;
+}
+
+int otaMqttPopCommand(char *buffer, size_t bufferSize)
+{
+    if (buffer == NULL || bufferSize == 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    errno = EAGAIN;
+    return -1;
+}
+
+#endif /* OTA_MQTT_BACKEND_PAHO */
 
 static const char *statusTopic(void)
 {

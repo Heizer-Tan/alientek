@@ -183,6 +183,8 @@ fw_printenv bootcount
 
 ## MQTT OTA
 
+零基础验证步骤见：`tests/ota-agent/MQTT-VERIFICATION.md`（本地副本也在 `docs/mqtt-ota-beginner-verification-guide.md`）。
+
 `ota-agent` 提供 MQTT OTA 的板端闭环：
 
 1. 解析包含 `requestId`、目标版本、下载地址、SHA256 和重启选项的命令。
@@ -191,7 +193,7 @@ fw_printenv bootcount
 4. 重启后加载 `/var/lib/ota-agent/state.json`，结合 `/proc/cmdline`、`active_slot`、`last_good_slot` 和 `upgrade_available` 判定最终结果。
 5. 新槽位完成提交时回报 `committed/success`；回到旧槽位或目标槽位不一致时回报 `failed/error`。
 
-当前 broker 连接与发布仍是返回 `ENOSYS` 的接缝。此时最终状态 payload 会输出到本地标准输出，便于板端日志和宿主测试观察，不会静默丢失恢复结果。
+板端镜像通过 `paho-mqtt-c` 对接真实 MQTT broker（connect / subscribe / publish）；daemon 主循环 `yield` 收包后走与 `--mqtt-command` 相同的升级流水线。宿主机测试默认 `OTA_MQTT_BACKEND=stub`。配置 `OTA_MQTT_HOST` 后可用 Mosquitto 联调；也可用 `ota-agent --mqtt-command` 直接注入命令 JSON。状态仍会打印到 stdout，便于串口观察。
 
 ## 按键演示（key-monitor）
 

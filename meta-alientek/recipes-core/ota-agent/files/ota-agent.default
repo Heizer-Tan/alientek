@@ -4,3 +4,5 @@ export OTA_MQTT_PORT="${OTA_MQTT_PORT:-1883}"
 export OTA_MQTT_CLIENT_ID="${OTA_MQTT_CLIENT_ID:-ota-agent}"
 export OTA_MQTT_COMMAND_TOPIC="${OTA_MQTT_COMMAND_TOPIC:-device/ota/command}"
 export OTA_MQTT_STATUS_TOPIC="${OTA_MQTT_STATUS_TOPIC:-device/ota/status}"
+# daemon 收到 MQTT 命令后，.swu 默认落盘路径
+export OTA_DOWNLOAD_PATH="${OTA_DOWNLOAD_PATH:-/var/tmp/ota-download.swu}"

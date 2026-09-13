@@ -162,7 +162,8 @@ int main(int argc, char **argv)
 }
 EOF
 
-g++ -O2 -Wall -Wextra -Werror -std=c++17 -x c++ -I"${sourceDir}" \
+g++ -O2 -Wall -Wextra -Werror -std=c++17 -DOTA_MQTT_BACKEND_STUB -x c++ \
+    -I"${sourceDir}" \
     "${tempDir}/test_ota_recovery.c" \
     "${sourceDir}/ota-exec.cpp" \
     "${sourceDir}/ota-mqtt.cpp" \
@@ -196,7 +197,9 @@ EOF
 printf '%s\n' 'console=ttymxc0 root=/dev/mmcblk0p3 rootwait' \
     >"${tempDir}/cmdline"
 make -C "${sourceDir}" clean >/dev/null
-make -C "${sourceDir}" CXXFLAGS='-O2 -Wall -Wextra -Werror -std=c++17' >/dev/null
+make -C "${sourceDir}" \
+    OTA_MQTT_BACKEND=stub \
+    CXXFLAGS='-O2 -Wall -Wextra -Werror -std=c++17' >/dev/null
 printf '%s\n' 'test swu payload' >"${tempDir}/package.swu"
 printf '%s\n' 'console=ttymxc0 root=/dev/mmcblk0p2 rootwait' \
     >"${tempDir}/cmdline-a"

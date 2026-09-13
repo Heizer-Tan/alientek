@@ -171,7 +171,8 @@ static int rejectMqttCommand(OtaState *state, const char *detail, int exitCode)
     return exitCode;
 }
 
-static int otaAgentRunMqttCommand(int argc, char **argv)
+static int executeMqttCommandJson(const char *jsonText,
+                                  const char *downloadPath)
 {
     const char *lockPath = readPathSetting(
         "OTA_AGENT_LOCK_FILE", "/var/run/ota-agent.lock");
@@ -186,13 +187,14 @@ static int otaAgentRunMqttCommand(int argc, char **argv)
     int result;
 
     memset(&state, 0, sizeof(state));
-    if (argc != 4 || otaMqttParseCommandJson(argv[2], &state, &command) != 0) {
+    if (jsonText == NULL || downloadPath == NULL ||
+        otaMqttParseCommandJson(jsonText, &state, &command) != 0) {
         (void)snprintf(state.detail, sizeof(state.detail), "%s",
                        "MQTT OTA 命令 JSON 无效");
         return rejectMqttCommand(&state, state.detail, 2);
     }
-    if (loadStateForApply(statePath, &previousState, errorBuf, sizeof(errorBuf)) !=
-        0) {
+    if (loadStateForApply(statePath, &previousState, errorBuf,
+                          sizeof(errorBuf)) != 0) {
         return rejectMqttCommand(&state, errorBuf, 1);
     }
     if (otaStateRequestSeen(&previousState, state.requestId) != 0) {
@@ -206,12 +208,13 @@ static int otaAgentRunMqttCommand(int argc, char **argv)
     if (lockFd < 0) {
         return rejectMqttCommand(&state, "ota-agent busy", 1);
     }
-    if (savePhase(statePath, &state, "received", errorBuf, sizeof(errorBuf)) != 0) {
+    if (savePhase(statePath, &state, "received", errorBuf, sizeof(errorBuf)) !=
+        0) {
         otaStateReleaseLock(lockFd, lockPath);
         return rejectMqttCommand(&state, errorBuf, 1);
     }
     emitMqttStatus(&state, "accepted", "running", "命令已解析");
-    result = executeApplyPipeline(command.url, command.sha256, argv[3],
+    result = executeApplyPipeline(command.url, command.sha256, downloadPath,
                                   state.autoReboot, statePath, &state,
                                   errorBuf, sizeof(errorBuf));
     emitMqttStatus(&state, result == 0 ? "completed" : "failed",
@@ -219,6 +222,29 @@ static int otaAgentRunMqttCommand(int argc, char **argv)
                    result == 0 ? "升级命令已执行" : errorBuf);
     otaStateReleaseLock(lockFd, lockPath);
     return result == 0 ? 0 : 1;
+}
+
+static int otaAgentRunMqttCommand(int argc, char **argv)
+{
+    if (argc != 4) {
+        fprintf(stderr,
+                "用法: %s --mqtt-command '<json>' <swu落盘路径>\n",
+                argv[0]);
+        return 2;
+    }
+    return executeMqttCommandJson(argv[2], argv[3]);
+}
+
+static void processPendingMqttCommands(void)
+{
+    const char *downloadPath = readPathSetting(
+        "OTA_DOWNLOAD_PATH", "/var/tmp/ota-download.swu");
+    char jsonText[4096];
+
+    if (otaMqttPopCommand(jsonText, sizeof(jsonText)) != 0) {
+        return;
+    }
+    (void)executeMqttCommandJson(jsonText, downloadPath);
 }
 
 static int loadStateForRecovery(const char *statePath, OtaState *state)
@@ -248,10 +274,10 @@ static void initializeMqtt(void)
         return;
     }
     if (otaMqttConnect(host, (int)port, clientId) != 0) {
-        fprintf(stderr, "MQTT 接缝尚不可用: %s\n", strerror(errno));
-        return;
+        fprintf(stderr, "MQTT 连接失败（将后台重试）: %s\n", strerror(errno));
     }
-    if (otaMqttSubscribeCommand(topic) != 0) {
+    if (otaMqttSubscribeCommand(topic) != 0 &&
+        errno != ENOTCONN && errno != ENOSYS) {
         fprintf(stderr, "订阅 MQTT 命令失败: %s\n", strerror(errno));
     }
 }
@@ -327,7 +353,8 @@ int otaAgentRunForeground(void)
 
     /* 常驻进程不再长期占用任务锁，避免阻塞 --apply 等执行入口。 */
     for (;;) {
-        (void)pause();
+        (void)otaMqttYield(1000);
+        processPendingMqttCommands();
     }
 }
 

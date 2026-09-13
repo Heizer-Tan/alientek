@@ -2,7 +2,8 @@ SUMMARY = "板端 MQTT OTA Agent"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
-RDEPENDS:${PN} = "curl coreutils board-update-tools"
+DEPENDS = "paho-mqtt-c"
+RDEPENDS:${PN} = "curl coreutils board-update-tools paho-mqtt-c"
 
 SRC_URI = " \
     file://src/ota-agent.cpp \
@@ -26,6 +27,8 @@ inherit update-rc.d
 
 INITSCRIPT_NAME = "ota-agent"
 INITSCRIPT_PARAMS = "defaults"
+
+EXTRA_OEMAKE = "OTA_MQTT_BACKEND=paho"
 
 do_compile() {
     oe_runmake
