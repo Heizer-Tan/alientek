@@ -70,7 +70,7 @@ export OTA_MQTT_STATUS_TOPIC=device/ota/status
 export OTA_DOWNLOAD_PATH=/var/tmp/ota-download.swu
 ```
 
-默认文件里 `OTA_MQTT_HOST` 是 `127.0.0.1`（只适合 broker 跑在板子本机）。实验室联调请改成 PC IP。
+默认文件里 `OTA_MQTT_HOST` 是 `127.0.0.1`（只适合 broker 跑在板子本机）。实验室联调请改成 PC IP 并保存；`ota-agent` 启动时会自动加载该文件（已在环境中的变量不会被覆盖）。也可用 `/etc/init.d/ota-agent restart` 启动服务。
 
 ### 1.3 命令 JSON
 

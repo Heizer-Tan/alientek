@@ -5,6 +5,7 @@
 #include "ota-mqtt.hpp"
 #include "ota-state.hpp"
 
+#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,81 @@ static const char *readPathSetting(const char *name, const char *defaultPath)
         return defaultPath;
     }
     return path;
+}
+
+static char *trimInPlace(char *text)
+{
+    char *end;
+
+    while (*text != '\0' && isspace((unsigned char)*text)) {
+        ++text;
+    }
+    if (*text == '\0') {
+        return text;
+    }
+    end = text + strlen(text) - 1;
+    while (end > text && isspace((unsigned char)*end)) {
+        *end = '\0';
+        --end;
+    }
+    return text;
+}
+
+static int applyDefaultAssignment(char *line)
+{
+    char *equals;
+    char *key;
+    char *value;
+    const char *existing;
+
+    line = trimInPlace(line);
+    if (line[0] == '\0' || line[0] == '#') {
+        return 0;
+    }
+    if (strncmp(line, "export ", 7) == 0) {
+        line = trimInPlace(line + 7);
+    }
+    equals = strchr(line, '=');
+    if (equals == NULL || equals == line) {
+        return 0;
+    }
+    *equals = '\0';
+    key = trimInPlace(line);
+    value = trimInPlace(equals + 1);
+    if (value[0] == '"' || value[0] == '\'') {
+        char quote = value[0];
+        size_t length = strlen(value);
+
+        if (length >= 2U && value[length - 1U] == quote) {
+            value[length - 1U] = '\0';
+            ++value;
+        }
+    }
+    if (key[0] == '\0') {
+        return 0;
+    }
+    existing = getenv(key);
+    if (existing != NULL && existing[0] != '\0') {
+        return 0;
+    }
+    return setenv(key, value, 0) == 0 ? 0 : -1;
+}
+
+/* 直接运行 ota-agent 时也加载 /etc/default/ota-agent，避免每次手动 export。 */
+static void loadAgentDefaultFile(void)
+{
+    const char *configPath = readPathSetting(
+        "OTA_AGENT_CONFIG_FILE", "/etc/default/ota-agent");
+    char line[512];
+    FILE *file = fopen(configPath, "r");
+
+    if (file == NULL) {
+        return;
+    }
+    while (fgets(line, sizeof(line), file) != NULL) {
+        (void)applyDefaultAssignment(line);
+    }
+    (void)fclose(file);
 }
 
 static int loadStateForApply(const char *statePath, OtaState *state,
@@ -365,6 +441,7 @@ int otaAgentRunDaemon(void)
 
 int main(int argc, char **argv)
 {
+    loadAgentDefaultFile();
     if (argc > 1) {
         if (strcmp(argv[1], "--apply") == 0) {
             return otaAgentRunApply(argc, argv);
