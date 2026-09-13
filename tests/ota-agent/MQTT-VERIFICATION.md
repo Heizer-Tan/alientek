@@ -1,30 +1,38 @@
-# MQTT OTA 零基础验证指南（Alientek Alpha）
+# MQTT OTA 验证指南（Alientek Alpha）
 
-面向：不熟悉 MQTT、第一次验证本仓库 `ota-agent` 的同学。  
-目标：先搞懂 MQTT 是什么，再按本仓库**今天真实能测的路径**做完验证。
+面向第一次验证本仓库 `ota-agent` 的同学。  
+目标：先理解 MQTT，再按**当前代码真实能力**把通路跑通。
+
+实验室常用约定（可按现场改）：
+
+| 角色 | 示例 |
+|---|---|
+| 板子 eth0 | `192.168.5.201`（ENET2 / `ethernet@20b4000`） |
+| PC / HTTP / Mosquitto | `192.168.5.27` |
+| 命令 topic | `device/ota/command` |
+| 状态 topic | `device/ota/status` |
 
 ---
 
-## 0. 先说结论（很重要）
+## 0. 当前能力（先看这里）
 
-板端镜像里的 `ota-agent` 已通过 **Eclipse Paho MQTT C**（`paho-mqtt-c` / `-lpaho-mqtt3c`）对接真实 broker：
+板端镜像里的 `ota-agent` 已用 **Eclipse Paho MQTT C**（Yocto 包 `paho-mqtt-c`，链接 `-lpaho-mqtt3c`）对接真实 broker。
 
-| 接口 | 行为 |
+| 能力 | 状态 |
 |---|---|
-| `otaMqttConnect` | 连接 `tcp://HOST:PORT`，失败时保留客户端并后台重试 |
-| `otaMqttSubscribeCommand` | 订阅命令 topic（默认 `device/ota/command`） |
-| `otaMqttPublishStatus` | 向状态 topic 发布 JSON（默认 `device/ota/status`） |
-| `otaMqttYield` + `otaMqttPopCommand` | daemon 主循环收包并执行升级流水线 |
+| 连接 broker / 订阅命令 / 发布状态 | 已实现（板端 `OTA_MQTT_BACKEND=paho`） |
+| daemon 收 MQTT 后自动走升级流水线 | 已实现（`yield` + `popCommand`） |
+| 断线后台重连并重新订阅 | 已实现 |
+| `--mqtt-command` 注入同一套业务逻辑 | 可用（不依赖 broker） |
+| 宿主机单测 | 可用（`OTA_MQTT_BACKEND=stub`，无需装 paho） |
 
-因此：
+> 若板上仍提示 `MQTT 接缝尚不可用` / `ENOSYS`，说明镜像偏旧，需包含提交 `feat: wire ota-agent MQTT transport via paho-mqtt-c` 及之后的构建。
 
-| 验证方式 | 是否可用 |
-|---|---|
-| PC 装 Mosquitto，往板子发 MQTT 命令，板子自动升级 | **可以**（配置好 `OTA_MQTT_HOST`） |
-| `--mqtt-command` 注入 JSON | **可以**（不依赖 broker，方便单测业务） |
-| 宿主机单测（JSON / 状态机） | **可以**（编译用 `OTA_MQTT_BACKEND=stub`） |
+建议验证顺序：
 
-宿主机默认 Makefile 后端是 **stub**（无 paho 依赖）；Yocto 配方强制 `OTA_MQTT_BACKEND=paho`。
+1. 宿主机脚本（不插板）  
+2. 板上 `--mqtt-command`（测下载/升级业务）  
+3. Mosquitto 真 MQTT 联调（测收发包闭环）
 
 ---
 
@@ -32,45 +40,39 @@
 
 ### 1.1 一句话
 
-MQTT 是一种**轻量消息协议**：设备之间不直接打电话，而是都连到一台叫 **Broker（代理/消息中间件）** 的服务器，通过 **Topic（主题）** 收发消息。
-
-### 1.2 三个角色
+设备不互相直连，都连到 **Broker**；通过 **Topic（主题）** 收发消息。
 
 ```text
-[发布者 Publisher] --发布到 topic--> [Broker] --推送给--> [订阅者 Subscriber]
+[发布者] --publish--> [Broker] --push--> [订阅者]
 ```
 
-- **Broker**：消息中转站。常见软件：Mosquitto、EMQX。默认端口 `1883`。
-- **Publisher**：往某个 topic 发消息的人（例如云端 OTA 平台）。
-- **Subscriber**：订阅某个 topic、被动收消息的人（例如板上的 `ota-agent`）。
+- **Broker**：消息中转站（如 Mosquitto），默认端口 `1883`
+- **Publisher**：发消息的一方（PC / 云端）
+- **Subscriber**：收消息的一方（板上 `ota-agent`）
 
-同一个程序既可以发也可以收。
+同一个程序可以既发又收。
 
-### 1.3 Topic 像“频道名”
-
-本仓库默认：
+### 1.2 本仓库 Topic
 
 | 用途 | Topic | 谁发 / 谁收 |
 |---|---|---|
-| 下发升级命令 | `device/ota/command` | 云端发，板子收 |
-| 上报升级状态 | `device/ota/status` | 板子发，云端收 |
+| 下发升级命令 | `device/ota/command` | PC/云端 → 板子 |
+| 上报升级状态 | `device/ota/status` | 板子 → PC/云端 |
 
-配置在板子：`/etc/default/ota-agent`
+板端配置：`/etc/default/ota-agent`
 
 ```bash
-OTA_MQTT_HOST=127.0.0.1
-OTA_MQTT_PORT=1883
-OTA_MQTT_CLIENT_ID=ota-agent
-OTA_MQTT_COMMAND_TOPIC=device/ota/command
-OTA_MQTT_STATUS_TOPIC=device/ota/status
-OTA_DOWNLOAD_PATH=/var/tmp/ota-download.swu
+export OTA_MQTT_HOST=192.168.5.27          # 改成跑 Mosquitto 的 PC IP
+export OTA_MQTT_PORT=1883
+export OTA_MQTT_CLIENT_ID=ota-agent
+export OTA_MQTT_COMMAND_TOPIC=device/ota/command
+export OTA_MQTT_STATUS_TOPIC=device/ota/status
+export OTA_DOWNLOAD_PATH=/var/tmp/ota-download.swu
 ```
 
-实验室请把 `OTA_MQTT_HOST` 改成跑 Mosquitto 的 PC IP（例如 `192.168.5.27`）。
+默认文件里 `OTA_MQTT_HOST` 是 `127.0.0.1`（只适合 broker 跑在板子本机）。实验室联调请改成 PC IP。
 
-### 1.4 消息内容是什么
-
-MQTT 本身不管业务格式。本仓库约定命令是一段 **JSON 文本**，例如：
+### 1.3 命令 JSON
 
 ```json
 {
@@ -78,258 +80,289 @@ MQTT 本身不管业务格式。本仓库约定命令是一段 **JSON 文本**�
   "version": "2.0.0",
   "url": "http://192.168.5.27/updates/app.swu",
   "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "autoReboot": true
+  "autoReboot": false
 }
 ```
 
-字段含义：
-
 | 字段 | 含义 |
 |---|---|
-| `requestId` | 本次任务唯一 ID；重复会拒绝 |
-| `version` | 目标版本；不高于当前版本会拒绝 |
-| `url` | `.swu` 下载地址 |
-| `sha256` | 包校验和（64 位十六进制） |
-| `autoReboot` | 是否自动重启（`true`/`false`） |
+| `requestId` | 任务唯一 ID；重复会拒绝 |
+| `version` | 目标版本；不高于当前 `VERSION_ID` 会拒绝 |
+| `url` | `.swu` 下载地址（板子要能访问） |
+| `sha256` | 64 位十六进制校验和 |
+| `autoReboot` | `true` / `false`，是否升级后自动重启 |
 
-状态回报 JSON 大致为：
+### 1.4 状态 JSON 与常见 phase
 
 ```json
 {
   "requestId": "req-1001",
-  "phase": "completed",
-  "result": "success",
-  "detail": "升级命令已执行"
+  "phase": "accepted",
+  "result": "running",
+  "detail": "命令已解析"
 }
 ```
 
+| phase（常见） | 含义 |
+|---|---|
+| `accepted` | 命令已解析，开始执行 |
+| `completed` | 本次命令流水线执行成功（下载/刷写调用完成） |
+| `failed` | 解析失败、版本拒绝、下载失败、忙锁等 |
+| `committed` | 重启后确认新槽位提交成功（恢复逻辑） |
+
+`emitMqttStatus` 会：
+
+1. 尽量 `otaMqttPublishStatus` 发到 status topic  
+2. 同时 `puts` 打到 stdout（串口/前台日志好观察）
+
 ---
 
-## 2. 本仓库 OTA 流程（对照 MQTT）
-
-完整闭环：
+## 2. 端到端流程
 
 ```text
-云端 --MQTT publish--> device/ota/command
-                           |
-                           v
-                      ota-agent 解析 JSON
-                           |
-                           v
-                 下载 .swu → sha256 校验 → board-apply-update
-                           |
-                           v
-                      写 A/B 槽 / 重启
-                           |
-                           v
-云端 <--MQTT publish-- device/ota/status
+PC mosquitto_pub --> device/ota/command
+                         |
+                         v
+                    ota-agent 解析 JSON
+                         |
+                         v
+              下载 .swu → sha256 → board-apply-update
+                         |
+                         v
+                   A/B 切槽 /（可选）重启
+                         |
+                         v
+PC mosquitto_sub <-- device/ota/status
 ```
 
-不经过 broker 时，仍可用命令行注入同一条 JSON：
+不经 broker 时，同一业务可用：
 
 ```bash
-ota-agent --mqtt-command '<JSON字符串>' /tmp/download.swu
+ota-agent --mqtt-command '<JSON>' /tmp/download.swu
 ```
 
-这等价于：**跳过无线收包，直接测业务逻辑**。
-
 ---
 
-## 3. 验证路径总览
+## 3. 路径 A：宿主机测试（推荐先做）
 
-建议按顺序做：
-
-1. **宿主机单元测试**（不插板也能跑）— 确认解析/状态机逻辑  
-2. **板上 `--mqtt-command` 注入** — 确认下载与升级调用  
-3. **真 broker 联调**（Mosquitto）— 确认 MQTT 收发闭环  
-
----
-
-## 4. 路径 A：宿主机跑测试（推荐先做）
-
-在开发机仓库根目录：
+开发机仓库根目录（脚本未必带执行位，可用 `sh`）：
 
 ```bash
-./tests/ota-agent/test_ota_recipe.sh
-./tests/ota-agent/test_ota_cpp_build.sh
-./tests/ota-agent/test_ota_guard.sh
-./tests/ota-agent/test_ota_recovery.sh
-./tests/ota-agent/test_service_lifecycle.sh
+cd /path/to/alientek
+sh tests/ota-agent/test_ota_recipe.sh
+sh tests/ota-agent/test_ota_cpp_build.sh
+sh tests/ota-agent/test_ota_guard.sh
+sh tests/ota-agent/test_ota_recovery.sh
+sh tests/ota-agent/test_service_lifecycle.sh
 ```
 
-需要本机有 `g++` / `make`。宿主机构建使用 `OTA_MQTT_BACKEND=stub`，无需安装 paho。
+需要：`g++`、`make`。  
+宿主测试强制/默认 **stub** 后端，**不必**在 PC 上安装 paho。
 
 ---
 
-## 5. 路径 B：板上验证（模拟 MQTT 命令）
+## 4. 路径 B：板上 `--mqtt-command`（模拟已收到 MQTT）
 
-### 5.1 前提
+### 4.1 前提
 
-- 板子已能进系统（TF 或 NFS）
-- 镜像里有 `ota-agent`（`alientek-image-base` 已安装）
-- 能 SSH 或串口登录
-- 若要真下载 `.swu`，PC 上要能提供 HTTP/文件 URL
+- 板子已进系统（TF / NFS）
+- 镜像含新版 `ota-agent` + `paho-mqtt-c`
+- 能串口或 SSH
+- 若要真下载：PC 提供 HTTP（或板子本地文件路径方案）
 
-查看服务：
+检查：
 
 ```bash
 /etc/init.d/ota-agent status
 ls -l /usr/bin/ota-agent
 cat /etc/default/ota-agent
+# 可选：确认链了 paho
+ldd /usr/bin/ota-agent | grep -i paho
 ```
 
-前台看日志（可选，停掉后台服务再跑）：
+前台观察（先停后台，避免抢锁）：
 
 ```bash
 /etc/init.d/ota-agent stop
 ota-agent
-# 预期：
-# ota-agent foreground mode
-# 若 broker 不可达：MQTT 连接失败（将后台重试）: ...
-# 若 broker 可达且配置正确：无连接失败日志，可继续发命令
+# 预期首行：ota-agent foreground mode
+# broker 不可达时：MQTT 连接失败（将后台重试）: ...
+# 这不影响 --mqtt-command；联调 MQTT 时再开 broker 并改 HOST
 ```
 
-### 5.2 准备一个最小 `.swu` 与 SHA256
+> `--mqtt-command` 与 daemon 共用锁 `/var/run/ota-agent.lock`。一边升级时另一边会报 `ota-agent busy`。测注入时建议先 `stop` 服务，或确认 daemon 空闲。
 
-实验室若已有正式 `.swu`：
+### 4.2 准备包与 SHA256
 
 ```bash
 # 在 PC 上
-sha256sum your.swu
-# 把文件放到板子能访问的 HTTP，或 scp 到板子本地
+sha256sum demo.swu
+# 放到板子可访问的 HTTP，例如 http://192.168.5.27/updates/demo.swu
 ```
 
-### 5.3 用 `--mqtt-command` 注入一条命令
-
-在板子上（示例，请改 URL / sha256 / version）：
+### 4.3 注入一条命令
 
 ```bash
-mkdir -p /tmp
+# 在板子上；请替换 sha256 / version / url
 CMD='{"requestId":"req-demo-001","version":"9.9.9","url":"http://192.168.5.27/updates/demo.swu","sha256":"这里填64位sha256","autoReboot":false}'
 
 ota-agent --mqtt-command "$CMD" /tmp/ota-download.swu
 echo "exit=$?"
+cat /var/lib/ota-agent/state.json
 ```
 
 观察：
 
-1. **标准输出**里是否出现状态 JSON（`emitMqttStatus` 仍会 `puts`，便于串口观察），例如含 `"phase":"accepted"` / `"completed"` / `"failed"`  
-2. 若 MQTT 已连接，同一状态也会发到 `device/ota/status`  
-3. `/var/lib/ota-agent/state.json` 是否更新  
-4. 若下载成功：落盘文件是否存在且校验通过  
+1. stdout 是否出现含 `"phase":"accepted"` / `"completed"` / `"failed"` 的 JSON  
+2. `state.json` 是否更新  
+3. URL 可达时，`/tmp/ota-download.swu` 是否落盘且校验通过  
 
-查看状态文件：
+查看当前系统版本（用于构造合法 `version`）：
 
 ```bash
-cat /var/lib/ota-agent/state.json
+grep VERSION_ID /etc/os-release
 ```
 
-### 5.4 故意测失败用例（建议都做）
+### 4.4 失败用例（建议都做）
 
 **重复 requestId：**
 
 ```bash
 ota-agent --mqtt-command "$CMD" /tmp/ota-download.swu
-# 预期失败，detail 类似：重复 requestId
+# 预期失败，detail 含：重复 requestId
 ```
 
 **版本不高于当前：**
 
 ```bash
-CMD2='{"requestId":"req-demo-002","version":"0.0.1",...}'
+CMD2='{"requestId":"req-demo-002","version":"0.0.1","url":"http://192.168.5.27/updates/demo.swu","sha256":"这里填同一份64位sha256","autoReboot":false}'
 ota-agent --mqtt-command "$CMD2" /tmp/ota-download.swu
+# 预期：目标版本不高于当前版本，拒绝执行
 ```
 
 **坏 JSON：**
 
 ```bash
 ota-agent --mqtt-command '{"requestId":"x"}' /tmp/x.swu
-# 预期：退出码 2，JSON 无效
+# 预期：退出码 2
 ```
 
-### 5.5 和真实升级的关系
+### 4.5 真刷写注意
 
-成功后仍会走：下载 → sha256 → `board-apply-update` → 按 `autoReboot` 重启 → 启动恢复判定 committed/failed。
+成功路径仍会：下载 → sha256 → `board-apply-update` →（`autoReboot`）重启 → 启动恢复回报 `committed`/`failed`。
 
-**真刷写前请确认 A/B 分区、`.swu` 为本板产物、有串口兜底。**
+真刷写前确认：A/B 分区正常、`.swu` 为本板产物、有串口兜底。
 
 ---
 
-## 6. 路径 C：真 MQTT 联调（Mosquitto）
+## 5. 路径 C：真 MQTT 联调（Mosquitto）
 
-### 6.1 PC 上装 Broker
+### 5.1 PC 安装并允许局域网连接
 
 ```bash
 sudo apt install mosquitto mosquitto-clients
 sudo systemctl enable --now mosquitto
 ```
 
-确认监听（默认允许局域网连接时，请按需改 `/etc/mosquitto/` 监听与 ACL）：
+默认许多发行版只监听本机。要让板子连上，增加配置，例如：
 
 ```bash
-ss -lntp | grep 1883
+# /etc/mosquitto/conf.d/lab.conf  （路径以发行版为准）
+listener 1883 0.0.0.0
+allow_anonymous true
 ```
 
-### 6.2 改板配置
-
-编辑 `/etc/default/ota-agent`：
+然后：
 
 ```bash
-export OTA_MQTT_HOST=192.168.5.27   # PC 的 IP
+sudo systemctl restart mosquitto
+ss -lntp | grep 1883
+# 本机自测
+mosquitto_sub -h 127.0.0.1 -t 'device/ota/status' -v &
+mosquitto_pub -h 127.0.0.1 -t 'device/ota/status' -m '{"ping":1}'
+```
+
+防火墙若开启，放行 TCP `1883`。
+
+### 5.2 板端配置并重启服务
+
+```bash
+# /etc/default/ota-agent
+export OTA_MQTT_HOST=192.168.5.27
 export OTA_MQTT_PORT=1883
 export OTA_DOWNLOAD_PATH=/var/tmp/ota-download.swu
+
+/etc/init.d/ota-agent restart
+/etc/init.d/ota-agent status
 ```
 
-重启 agent：
+前台确认（可选）：
 
 ```bash
-/etc/init.d/ota-agent restart
+/etc/init.d/ota-agent stop
+ota-agent
+# 配置正确且 broker 可达时，不应再刷「连接失败」；
+# 偶发网络抖动会打印断开并后台重连
 ```
 
-### 6.3 PC 订阅状态、发布命令
+### 5.3 PC：订状态、发命令
 
-终端 1（看板子回报）：
+终端 1：
 
 ```bash
 mosquitto_sub -h 127.0.0.1 -t 'device/ota/status' -v
 ```
 
-终端 2（发升级命令）：
+终端 2（每次换新的 `requestId`，`version` 高于板上 `VERSION_ID`）：
 
 ```bash
-mosquitto_pub -h 127.0.0.1 -t 'device/ota/command' -m '{"requestId":"req-live-1","version":"9.9.9","url":"http://192.168.5.27/updates/demo.swu","sha256":"...","autoReboot":false}'
+mosquitto_pub -h 127.0.0.1 -t 'device/ota/command' -m \
+'{"requestId":"req-live-1","version":"9.9.9","url":"http://192.168.5.27/updates/demo.swu","sha256":"这里填64位sha256","autoReboot":false}'
 ```
 
-预期：终端 1 陆续看到 `accepted` → `completed`/`failed` 等状态；板上 `OTA_DOWNLOAD_PATH` 出现下载文件（若 URL 可达）。
+预期：
+
+1. 终端 1 陆续看到 `accepted` → `completed` 或 `failed`  
+2. URL 可达时，板上 `OTA_DOWNLOAD_PATH`（默认 `/var/tmp/ota-download.swu`）出现文件  
+3. 板子串口/前台也能看到同样的状态 JSON  
+
+daemon 收到命令后落盘路径来自 **`OTA_DOWNLOAD_PATH`**，不是 `--mqtt-command` 的第二个参数。
 
 ---
 
-## 7. 常用文件与命令速查
+## 6. 常用路径与命令
 
 | 路径/命令 | 作用 |
 |---|---|
 | `/usr/bin/ota-agent` | OTA 主程序 |
-| `/etc/default/ota-agent` | MQTT 主机/端口/topic/下载路径 |
+| `/etc/default/ota-agent` | MQTT / 下载路径配置 |
 | `/etc/init.d/ota-agent` | 启停服务 |
 | `/var/lib/ota-agent/state.json` | 任务状态 |
 | `/var/run/ota-agent.lock` | 防并发锁 |
-| `ota-agent --mqtt-command '<json>' <下载落盘路径>` | 模拟收到 MQTT 命令 |
-| `ota-agent --apply <url> <sha256> <path> [--reboot]` | 直接执行升级流水线 |
-| `tests/ota-agent/*` | 宿主机自动化验证 |
+| `ota-agent --mqtt-command '<json>' <落盘路径>` | 模拟收到命令 |
+| `ota-agent --apply <url> <sha256> <path> [--reboot]` | 直接跑升级流水线 |
+| `tests/ota-agent/*` | 宿主机自动化测试 |
+
+相关源码：
+
+- `meta-alientek/recipes-core/ota-agent/files/src/ota-mqtt.cpp`（paho / stub）  
+- `meta-alientek/recipes-core/ota-agent/files/src/ota-agent.cpp`（主循环与命令执行）  
+- `meta-alientek/recipes-core/ota-agent/ota-agent_1.0.bb`（`DEPENDS`/`RDEPENDS` + `OTA_MQTT_BACKEND=paho`）
 
 ---
 
-## 8. 验收清单
+## 7. 验收清单
 
 ### 概念
 
 - [ ] 能说清 Broker / Topic / Publish / Subscribe  
-- [ ] 知道本仓库两个默认 topic  
+- [ ] 知道两个默认 topic 与 `OTA_MQTT_HOST` 要指向 PC  
 
-### 实现认知
+### 实现
 
-- [ ] 知道板端用 paho；宿主测试用 stub  
-- [ ] 知道 `--mqtt-command` 与真 MQTT 共用同一套业务流水线  
+- [ ] 板端 paho；宿主测试 stub  
+- [ ] `--mqtt-command` 与真 MQTT 共用同一业务流水线  
+- [ ] daemon 落盘用 `OTA_DOWNLOAD_PATH`  
 
 ### 宿主机
 
@@ -337,34 +370,44 @@ mosquitto_pub -h 127.0.0.1 -t 'device/ota/command' -m '{"requestId":"req-live-1"
 
 ### 板端
 
-- [ ] `ota-agent status` 可查  
-- [ ] `--mqtt-command` 合法 JSON 有状态输出 / state 文件  
-- [ ] 重复 `requestId` / 过低 `version` / 坏 JSON 行为符合预期  
-- [ ] Mosquitto 联调：pub 命令后 status topic 有回报  
+- [ ] `ldd` 能看到 paho（新镜像）  
+- [ ] `--mqtt-command` 合法 JSON 有状态输出 / `state.json`  
+- [ ] 重复 `requestId`、过低 `version`、坏 JSON 行为符合预期  
+- [ ] Mosquitto：`pub` 命令后 status topic 有回报  
 
 ---
 
-## 9. 常见问题
+## 8. 常见问题
 
-**Q: 启动提示 MQTT 连接失败（将后台重试）？**  
-A: broker 未开、IP/端口不对、或防火墙拦了 `1883`。daemon 会继续跑并周期性重连；业务仍可用 `--mqtt-command` 验证。
+**Q: 启动一直 “MQTT 连接失败（将后台重试）”？**  
+A: 检查 `OTA_MQTT_HOST`、PC 上 Mosquitto 是否监听 `0.0.0.0:1883`、板子能否 `ping` PC、防火墙是否放行。daemon 会继续跑并重连；业务仍可用 `--mqtt-command`。
+
+**Q: PC 上 `mosquitto_pub` 了，板子没反应？**  
+A: 逐项查：镜像是否含 paho 版 agent、服务是否在跑、topic 是否一致、broker 是否允许远程、板子到 PC:1883 是否通。可在 PC 上用另一终端 `mosquitto_sub` 同一 command topic 自证消息是否进了 broker。
 
 **Q: 状态发到哪了？**  
-A: 已连接时发到 `OTA_MQTT_STATUS_TOPIC`；同时 `emitMqttStatus` 仍会打印到 stdout，方便串口观察。若 publish 失败且 `errno==ENOSYS`（stub），最终态也会 `puts`。
+A: 已连接时发到 `OTA_MQTT_STATUS_TOPIC`；同时 stdout 仍会打印。stub / publish 失败且 `ENOSYS` 时，部分最终态会退回 `puts`。
 
 **Q: 宿主机构建要装 paho 吗？**  
-A: 不必。测试脚本使用 `OTA_MQTT_BACKEND=stub`。只有 Yocto 镜像构建会链接真实库。
+A: 不必。只有 Yocto 镜像构建链接真实库。
 
-**Q: `requestId` 能不能每次都一样？**  
-A: 不能。重复会被拒绝，这是防重放设计。
+**Q: `requestId` 能重复吗？**  
+A: 不能；重复会拒绝（防重放）。
+
+**Q: 为什么 MQTT 触发的文件不在我指定的 `/tmp/xxx.swu`？**  
+A: 只有 `--mqtt-command` 的第二个参数指定落盘路径；daemon 收包使用 `OTA_DOWNLOAD_PATH`。
 
 ---
 
-## 10. 实现备注
+## 9. 实现备注
 
-- 客户端库：`paho-mqtt-c`（meta-oe，kas 已含 `meta-oe`）  
-- 配方：`DEPENDS` / `RDEPENDS` + `EXTRA_OEMAKE = "OTA_MQTT_BACKEND=paho"`  
-- 代码：`meta-alientek/recipes-core/ota-agent/files/src/ota-mqtt.cpp`  
+| 项 | 说明 |
+|---|---|
+| 客户端库 | `paho-mqtt-c`（`meta-oe`，kas 已含） |
+| 板端后端 | `EXTRA_OEMAKE = "OTA_MQTT_BACKEND=paho"` |
+| 宿主后端 | Makefile 默认 `stub` |
+| QoS | 命令订阅 / 状态发布使用 QoS 1 |
+| 命令缓冲 | 单槽；上一命令未处理完时新命令会丢弃并打日志 |
 
-文档版本：与 paho MQTT 传输及 stub 双后端对齐。  
-相关代码：`meta-alientek/recipes-core/ota-agent/`，测试：`tests/ota-agent/`。
+文档版本：与 paho MQTT 传输、stub 双后端及 `OTA_DOWNLOAD_PATH` 行为对齐。  
+本地说明副本（若存在）：`docs/mqtt-ota-beginner-verification-guide.md`（`docs/` 通常被 gitignore）。
