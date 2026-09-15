@@ -163,6 +163,14 @@ reboot
 
 `board-apply-update` 会读取当前 `active_slot`，自动选择 `stable,slotA` 或 `stable,slotB`，始终写入非活动 rootfs 槽。
 
+### 板端 Web 升级
+
+浏览器打开 `http://<板子IP>:8080/`，在「固件升级」区选择 `.swu` 后上传。服务端调用 `board-apply-update` 自动选非活动槽并切环境，成功后自动重启。无口令，仅建议在实验室可信局域网使用。CLI 升级仍可用：
+
+```bash
+board-apply-update --reboot /tmp/xxx.swu
+```
+
 ### 首启确认与回滚
 
 - 升级阶段会把 `upgrade_available=1` 并切换 `active_slot`
@@ -213,6 +221,7 @@ ap3216c-read -w
 
 - 采集：`ap3216c-logger` 每 5 分钟写入 `/var/lib/ap3216c/ap3216c.db`，保留 7 天
 - 查询：浏览器打开 `http://<板子IP>:8080/`
+- 固件升级：同页「固件升级」上传 `.swu`（自动 A/B，成功后重启）
 - 启停：`/etc/init.d/ap3216c-logger start|stop`；`/etc/init.d/webserver start|stop`
 - 手动读数仍可用：`ap3216c-read`
 

@@ -1,9 +1,9 @@
-SUMMARY = "通用板端 Web：查询传感器历史"
+SUMMARY = "通用板端 Web：查询传感器历史与固件升级"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://webserver.c;beginline=1;endline=1;md5=234d7d4edd08962c0144e4604050e0b6"
 
 DEPENDS = "sqlite3"
-RDEPENDS:${PN} = "sqlite3 libsqlite3"
+RDEPENDS:${PN} = "sqlite3 libsqlite3 board-update-tools"
 
 SRC_URI = " \
     file://src/webserver.c \
