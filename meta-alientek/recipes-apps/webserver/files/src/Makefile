@@ -1,5 +1,5 @@
-TARGET = board-web
-SRCS = board-web.c
+TARGET = webserver
+SRCS = webserver.c
 CFLAGS ?= -Wall -O2
 LDFLAGS ?=
 LDLIBS = -lsqlite3

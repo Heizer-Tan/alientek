@@ -1,6 +1,6 @@
 #!/bin/sh
 ### BEGIN INIT INFO
-# Provides:          board-web
+# Provides:          webserver
 # Required-Start:    $local_fs $network
 # Required-Stop:     $local_fs
 # Default-Start:     2 3 4 5
@@ -8,11 +8,11 @@
 # Short-Description: Board sensor history web UI on :8080
 ### END INIT INFO
 
-# board-web SysV 脚本：默认开机自启
+# webserver SysV 脚本：默认开机自启
 
-NAME=board-web
-DAEMON=/usr/bin/board-web
-PIDFILE=/var/run/board-web.pid
+NAME=webserver
+DAEMON=/usr/bin/webserver
+PIDFILE=/var/run/webserver.pid
 
 [ -x "$DAEMON" ] || exit 0
 

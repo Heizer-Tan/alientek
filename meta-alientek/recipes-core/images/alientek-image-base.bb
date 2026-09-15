@@ -21,7 +21,7 @@ CORE_IMAGE_EXTRA_INSTALL += " \
     ap3216c-module \
     ap3216c-logger \
     board-network \
-    board-web \
+    webserver \
     board-update-tools \
     ota-agent \
     swupdate \

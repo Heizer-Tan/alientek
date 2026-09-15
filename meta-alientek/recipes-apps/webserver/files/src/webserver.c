@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT */
-/* board-web：最小 HTTP 服务，查询 AP3216C SQLite 历史 */
+/* webserver：最小 HTTP 服务，查询 AP3216C SQLite 历史 */
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -15,9 +15,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#define BOARD_WEB_PORT 8080
-#define BOARD_WEB_DB_PATH "/var/lib/ap3216c/ap3216c.db"
-#define BOARD_WEB_INDEX "/usr/share/board-web/index.html"
+#define WEBSERVER_PORT 8080
+#define WEBSERVER_DB_PATH "/var/lib/ap3216c/ap3216c.db"
+#define WEBSERVER_INDEX "/usr/share/webserver/index.html"
 #define REQ_BUF_SIZE 4096
 #define SEND_CHUNK 4096
 #define DEFAULT_RANGE_SEC 86400
@@ -332,7 +332,7 @@ static int openSamplesDb(sqlite3 **db)
 	if (!db)
 		return -1;
 	*db = NULL;
-	if (sqlite3_open_v2(BOARD_WEB_DB_PATH, db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK) {
+	if (sqlite3_open_v2(WEBSERVER_DB_PATH, db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK) {
 		if (*db) {
 			syslog(LOG_ERR, "sqlite3_open: %s", sqlite3_errmsg(*db));
 			sqlite3_close(*db);
@@ -371,7 +371,7 @@ static void handleClient(int clientFd)
 		return;
 	}
 	if (strcmp(path, "/") == 0) {
-		if (readWholeFile(BOARD_WEB_INDEX, &body, &bodyLen) != 0) {
+		if (readWholeFile(WEBSERVER_INDEX, &body, &bodyLen) != 0) {
 			sendResponse(clientFd, 500, "Internal Server Error",
 				     "text/plain", err500, strlen(err500));
 			return;
@@ -427,7 +427,7 @@ static int createListenSocket(void)
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr.sin_port = htons(BOARD_WEB_PORT);
+	addr.sin_port = htons(WEBSERVER_PORT);
 	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
 		syslog(LOG_ERR, "bind: %s", strerror(errno));
 		close(fd);
@@ -447,7 +447,7 @@ int main(void)
 	int listenFd;
 	int clientFd;
 
-	openlog("board-web", LOG_PID, LOG_DAEMON);
+	openlog("webserver", LOG_PID, LOG_DAEMON);
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = handleSignal;
 	sigaction(SIGINT, &sa, NULL);
@@ -458,7 +458,7 @@ int main(void)
 		closelog();
 		return 1;
 	}
-	syslog(LOG_INFO, "listening on 0.0.0.0:%d", BOARD_WEB_PORT);
+	syslog(LOG_INFO, "listening on 0.0.0.0:%d", WEBSERVER_PORT);
 
 	while (!gStopRequested) {
 		clientFd = accept(listenFd, NULL, NULL);

@@ -216,7 +216,7 @@ ap3216c-read -w
 
 - 采集：`ap3216c-logger` 每 5 分钟写入 `/var/lib/ap3216c/ap3216c.db`，保留 7 天
 - 查询：浏览器打开 `http://<板子IP>:8080/`
-- 启停：`/etc/init.d/ap3216c-logger start|stop`；`/etc/init.d/board-web start|stop`
+- 启停：`/etc/init.d/ap3216c-logger start|stop`；`/etc/init.d/webserver start|stop`
 - 手动读数仍可用：`ap3216c-read`
 
 ## 时间同步（NTP）
