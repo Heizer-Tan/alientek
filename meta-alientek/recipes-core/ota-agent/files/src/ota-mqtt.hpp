@@ -16,6 +16,8 @@ int otaMqttPublishStatus(const char *topic, const char *payload);
 int otaMqttYield(int timeoutMs);
 /* 取出一条待处理命令 JSON；无命令时返回 -1 且 errno=EAGAIN。 */
 int otaMqttPopCommand(char *buffer, size_t bufferSize);
+/* 当前是否已与 broker 建立连接。 */
+int otaMqttIsConnected(void);
 int otaMqttParseCommandJson(const char *jsonText, OtaState *state,
                             OtaMqttCommand *command);
 int otaHandleCommandJson(const char *jsonText, OtaState *state);

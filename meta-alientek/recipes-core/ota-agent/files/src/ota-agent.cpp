@@ -203,10 +203,9 @@ static void emitMqttStatus(OtaState *state, const char *phase,
         fprintf(stderr, "生成 MQTT 状态失败: %s\n", strerror(errno));
         return;
     }
+    /* 状态交给 mqtt-agent 从 stdout 转发；此处只打印。 */
+    (void)topic;
     puts(payload);
-    if (otaMqttPublishStatus(topic, payload) != 0 && errno != ENOSYS) {
-        fprintf(stderr, "发布 MQTT 状态失败: %s\n", strerror(errno));
-    }
 }
 
 static int compareVersionToken(const char **versionText)
@@ -311,18 +310,6 @@ static int otaAgentRunMqttCommand(int argc, char **argv)
     return executeMqttCommandJson(argv[2], argv[3]);
 }
 
-static void processPendingMqttCommands(void)
-{
-    const char *downloadPath = readPathSetting(
-        "OTA_DOWNLOAD_PATH", "/var/tmp/ota-download.swu");
-    char jsonText[4096];
-
-    if (otaMqttPopCommand(jsonText, sizeof(jsonText)) != 0) {
-        return;
-    }
-    (void)executeMqttCommandJson(jsonText, downloadPath);
-}
-
 static int loadStateForRecovery(const char *statePath, OtaState *state)
 {
     memset(state, 0, sizeof(*state));
@@ -335,33 +322,45 @@ static int loadStateForRecovery(const char *statePath, OtaState *state)
     return errno == ENOENT ? 1 : -1;
 }
 
-static void initializeMqtt(void)
-{
-    const char *host = readPathSetting("OTA_MQTT_HOST", "127.0.0.1");
-    const char *clientId = readPathSetting("OTA_MQTT_CLIENT_ID", "ota-agent");
-    const char *topic = readPathSetting(
-        "OTA_MQTT_COMMAND_TOPIC", "device/ota/command");
-    const char *portText = readPathSetting("OTA_MQTT_PORT", "1883");
-    char *end = NULL;
-    long port = strtol(portText, &end, 10);
-
-    if (end == portText || *end != '\0' || port < 1 || port > 65535) {
-        fprintf(stderr, "MQTT 端口配置无效: %s\n", portText);
-        return;
-    }
-    if (otaMqttConnect(host, (int)port, clientId) != 0) {
-        fprintf(stderr, "MQTT 连接失败（将后台重试）: %s\n", strerror(errno));
-    }
-    if (otaMqttSubscribeCommand(topic) != 0 &&
-        errno != ENOTCONN && errno != ENOSYS) {
-        fprintf(stderr, "订阅 MQTT 命令失败: %s\n", strerror(errno));
-    }
-}
-
 static int isPendingRecovery(const OtaState *state)
 {
     return strcmp(state->phase, "upgrading") == 0 ||
            strcmp(state->phase, "installing") == 0;
+}
+
+static int isFinalRecoveryPhase(const char *phase)
+{
+    return strcmp(phase, "committed") == 0 || strcmp(phase, "failed") == 0;
+}
+
+/*
+ * 旧槽残留 phase=upgrading，而 U-Boot 环境已是最终态时：以环境为准回写文件。
+ * 否则会盖过 committed，导致恢复死循环卡启动（A 写状态、B 提交后回 A 即复现）。
+ */
+static int clearStalePendingFromEnvironment(const char *statePath,
+                                            OtaState *fileState)
+{
+    OtaState envState;
+
+    if (!isPendingRecovery(fileState)) {
+        return 0;
+    }
+    memset(&envState, 0, sizeof(envState));
+    if (otaStateLoadFromEnvironment(&envState) != 0) {
+        return 0;
+    }
+    if (!isFinalRecoveryPhase(envState.phase)) {
+        return 0;
+    }
+    fprintf(stderr,
+            "检测到残留 pending 状态，环境已是 %s，回写并跳过恢复\n",
+            envState.phase);
+    *fileState = envState;
+    if (otaStateSave(statePath, fileState) != 0) {
+        fprintf(stderr, "回写 OTA 状态失败: %s\n", strerror(errno));
+        return -1;
+    }
+    return 1;
 }
 
 static int reportAndSaveRecovery(const char *statePath, OtaState *state)
@@ -382,10 +381,13 @@ static int reportAndSaveRecovery(const char *statePath, OtaState *state)
     return 0;
 }
 
+/* 返回值：0 完成/跳过；1 可重试。 */
 static int recoverPendingAtStartup(const char *statePath)
 {
     OtaState state;
     int loadResult;
+    int savedErrno;
+    int staleResult;
 
     loadResult = loadStateForRecovery(statePath, &state);
     if (loadResult < 0) {
@@ -395,48 +397,61 @@ static int recoverPendingAtStartup(const char *statePath)
     if (loadResult == 1) {
         return 0;
     }
+    if (loadResult == 2) {
+        staleResult = clearStalePendingFromEnvironment(statePath, &state);
+        if (staleResult < 0) {
+            return 1;
+        }
+        if (staleResult > 0) {
+            return 0;
+        }
+    }
     if (!isPendingRecovery(&state)) {
         return 0;
     }
     if (otaRecoverPendingState(&state) != 0) {
-        if (errno != EAGAIN) {
-            fprintf(stderr, "判定 OTA 恢复结果失败: %s\n", strerror(errno));
+        savedErrno = errno;
+        /* NFS/无 mmc 根时无法判定槽位，跳过以免卡死 SysV 启动。 */
+        if (savedErrno == ENODEV) {
+            fprintf(stderr,
+                    "当前非 A/B 根分区启动，跳过 OTA 恢复（待 mmc 启动再判定）\n");
+            return 0;
+        }
+        if (savedErrno != EAGAIN) {
+            fprintf(stderr, "判定 OTA 恢复结果失败: %s\n",
+                    strerror(savedErrno));
         }
         return 1;
     }
-    return reportAndSaveRecovery(statePath, &state);
+    return reportAndSaveRecovery(statePath, &state) == 0 ? 0 : 1;
 }
 
 static void completeStartupRecovery(const char *statePath)
 {
+    /* 限次重试：提交竞态或短暂 I/O 失败可恢复；禁止无限循环堵开机。 */
+    const int maxAttempts = 30;
+    int attempt = 0;
     int recoveryResult = recoverPendingAtStartup(statePath);
 
-    /* 提交尚未完成或恢复 I/O 暂时失败时，持续重试避免永久搁置。 */
-    while (recoveryResult == 1) {
+    while (recoveryResult == 1 && attempt < maxAttempts) {
         sleep(1);
+        ++attempt;
         recoveryResult = recoverPendingAtStartup(statePath);
+    }
+    if (recoveryResult == 1) {
+        fprintf(stderr, "OTA 恢复仍未完成，稍后再试（不阻塞启动）\n");
     }
 }
 
-int otaAgentRunForeground(void)
+
+int otaAgentRunRecovery(void)
 {
     const char *statePath = readPathSetting(
         "OTA_AGENT_STATE_FILE", "/var/lib/ota-agent/state.json");
 
-    puts("ota-agent foreground mode");
-    initializeMqtt();
+    puts("ota-agent recovery mode");
     completeStartupRecovery(statePath);
-
-    /* 常驻进程不再长期占用任务锁，避免阻塞 --apply 等执行入口。 */
-    for (;;) {
-        (void)otaMqttYield(1000);
-        processPendingMqttCommands();
-    }
-}
-
-int otaAgentRunDaemon(void)
-{
-    return otaAgentRunForeground();
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -452,5 +467,5 @@ int main(int argc, char **argv)
         fprintf(stderr, "未知参数: %s\n", argv[1]);
         return 2;
     }
-    return otaAgentRunDaemon();
+    return otaAgentRunRecovery();
 }

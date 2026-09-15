@@ -1,4 +1,3 @@
 #pragma once
 
-int otaAgentRunForeground(void);
-int otaAgentRunDaemon(void);
+int otaAgentRunRecovery(void);

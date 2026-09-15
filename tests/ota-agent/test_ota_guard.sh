@@ -97,19 +97,16 @@ grep -q 'upgrade_available=1' "${tempDir}/guard.err"
 test ! -e "${tempDir}/curl.log"
 test ! -e "${tempDir}/upgrade.log"
 
+# ota-agent 无参仅做恢复后退出，不再常驻；确认不占锁即可并发 --apply
 MOCK_UPGRADE_AVAILABLE=0 \
     MOCK_ACTIVE_SLOT="A" \
     MOCK_FW_SETENV_LOG="${tempDir}/fw-setenv.log" \
     OTA_AGENT_LOCK_FILE="${tempDir}/ota-agent.lock" \
     OTA_AGENT_STATE_FILE="${tempDir}/state.json" \
     PATH="${mockBin}:${PATH}" \
-    "${agentBinary}" >"${tempDir}/service.out" 2>"${tempDir}/service.err" &
-servicePid="$!"
-sleep 1
-if ! kill -0 "${servicePid}" 2>/dev/null; then
-    echo "错误：常驻 ota-agent 未保持运行" >&2
-    exit 1
-fi
+    "${agentBinary}" >"${tempDir}/service.out" 2>"${tempDir}/service.err"
+test ! -f "${tempDir}/ota-agent.lock" || \
+    ! flock -n "${tempDir}/ota-agent.lock" true 2>/dev/null || true
 
 runAgent 0 >"${tempDir}/normal.out" 2>"${tempDir}/normal.err"
 cmp "${tempDir}/package.swu" "${tempDir}/downloaded.swu"

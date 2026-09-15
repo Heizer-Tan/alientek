@@ -8,26 +8,20 @@ for sourceFile in \
     meta-alientek/recipes-core/ota-agent/files/src/Makefile \
     meta-alientek/recipes-core/ota-agent/files/src/ota-agent.hpp \
     meta-alientek/recipes-core/ota-agent/files/src/ota-agent.cpp \
-    meta-alientek/recipes-core/ota-agent/files/ota-agent.init \
-    meta-alientek/recipes-core/ota-agent/files/ota-agent.default
+    meta-alientek/recipes-core/ota-agent/files/ota-agent.default \
+    meta-alientek/recipes-core/mqtt-agent/mqtt-agent_1.0.bb \
+    meta-alientek/recipes-core/mqtt-agent/files/src/mqtt-agent.cpp \
+    meta-alientek/recipes-core/mqtt-agent/files/mqtt-agent.init \
+    meta-alientek/recipes-core/mqtt-agent/files/mqtt-agent.default
 do
     test -f "${sourceFile}"
 done
 
 grep -q 'ota-agent' "${image}"
-grep -q 'inherit update-rc.d' "${recipe}"
-grep -q 'INITSCRIPT_NAME = "ota-agent"' "${recipe}"
-if ! grep -q 'paho-mqtt-c' "${recipe}"; then
-    echo "expected: ota-agent depends on paho-mqtt-c for MQTT transport" >&2
-    exit 1
-fi
-if ! grep -q 'RDEPENDS:${PN} = "curl coreutils board-update-tools paho-mqtt-c"' \
-    "${recipe}"; then
-    echo "expected: coreutils provides sha256sum; paho-mqtt-c for MQTT" >&2
-    exit 1
-fi
+grep -q 'mqtt-agent' "${image}"
+grep -q 'EXTRA_OEMAKE = "OTA_MQTT_BACKEND=stub"' "${recipe}"
+grep -q 'paho-mqtt-c' meta-alientek/recipes-core/mqtt-agent/mqtt-agent_1.0.bb
 grep -q '${bindir}/ota-agent' "${recipe}"
 grep -q '${sysconfdir}/default/ota-agent' "${recipe}"
-grep -q '${sysconfdir}/init.d/ota-agent' "${recipe}"
 
-echo "ota-agent recipe scaffold integrated"
+echo "ota-agent / mqtt-agent recipe scaffold integrated"

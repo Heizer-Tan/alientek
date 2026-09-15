@@ -183,17 +183,14 @@ fw_printenv bootcount
 
 ## MQTT OTA
 
-零基础验证步骤见：`tests/ota-agent/MQTT-VERIFICATION.md`（本地副本也在 `docs/mqtt-ota-beginner-verification-guide.md`）。
+零基础验证步骤见：`tests/ota-agent/MQTT-VERIFICATION.md`。
 
-`ota-agent` 提供 MQTT OTA 的板端闭环：
+板端拆成两个进程：
 
-1. 解析包含 `requestId`、目标版本、下载地址、SHA256 和重启选项的命令。
-2. 下载并校验 `.swu`，在执行升级前持久化目标槽位和任务阶段。
-3. 调用 `board-apply-update` 写入非活动槽位，由现有 A/B 机制切槽、提交或回滚。
-4. 重启后加载 `/var/lib/ota-agent/state.json`，结合 `/proc/cmdline`、`active_slot`、`last_good_slot` 和 `upgrade_available` 判定最终结果。
-5. 新槽位完成提交时回报 `committed/success`；回到旧槽位或目标槽位不一致时回报 `failed/error`。
+- **`mqtt-agent`**（常驻）：用 `paho-mqtt-c` 连接/探测 broker、心跳、订阅 `device/ota/command`；收到命令后 `exec`/`popen` `ota-agent --mqtt-command`，并把 stdout 状态 JSON 再发布到 `device/ota/status`。
+- **`ota-agent`**（短命）：无参只做 A/B 恢复后退出；`--mqtt-command` / `--apply` 跑下载校验与 `board-apply-update`。不再常驻 MQTT。
 
-板端镜像通过 `paho-mqtt-c` 对接真实 MQTT broker（connect / subscribe / publish）；daemon 主循环 `yield` 收包后走与 `--mqtt-command` 相同的升级流水线。宿主机测试默认 `OTA_MQTT_BACKEND=stub`。配置 `OTA_MQTT_HOST` 后可用 Mosquitto 联调；也可用 `ota-agent --mqtt-command` 直接注入命令 JSON。状态仍会打印到 stdout，便于串口观察。
+配置：`/etc/default/mqtt-agent`（`OTA_MQTT_HOST=auto` 可扫 eth0 网段 `1883`）、`/etc/default/ota-agent`（状态路径等）。启停：`/etc/init.d/mqtt-agent`。宿主测试默认 stub，可不装 paho。
 
 ## 按键演示（key-monitor）
 

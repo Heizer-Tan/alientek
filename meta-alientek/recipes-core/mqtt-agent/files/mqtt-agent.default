@@ -1,0 +1,11 @@
+# mqtt-agent：MQTT 连接 / 探测 / 心跳；升级由 ota-agent 执行
+export OTA_MQTT_HOST=auto
+export OTA_MQTT_PORT=1883
+export OTA_MQTT_CLIENT_ID=ota-agent
+export OTA_MQTT_COMMAND_TOPIC=device/ota/command
+export OTA_MQTT_STATUS_TOPIC=device/ota/status
+export OTA_MQTT_HEARTBEAT_TOPIC=device/heartbeat
+export OTA_MQTT_HEARTBEAT_SEC=30
+export OTA_MQTT_DISCOVER_IFACE=eth0
+export OTA_AGENT_BIN=/usr/bin/ota-agent
+export OTA_DOWNLOAD_PATH=/var/tmp/ota-download.swu

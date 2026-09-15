@@ -1,9 +1,2 @@
-# ota-agent 默认配置（init 与直接运行 ota-agent 都会加载）
-# 实验室请把 HOST 改成跑 Mosquitto 的 PC IP，例如 192.168.5.13
-export OTA_MQTT_HOST=127.0.0.1
-export OTA_MQTT_PORT=1883
-export OTA_MQTT_CLIENT_ID=ota-agent
-export OTA_MQTT_COMMAND_TOPIC=device/ota/command
-export OTA_MQTT_STATUS_TOPIC=device/ota/status
-# daemon 收到 MQTT 命令后，.swu 默认落盘路径
+# ota-agent：升级与恢复相关路径（MQTT 见 /etc/default/mqtt-agent）
 export OTA_DOWNLOAD_PATH=/var/tmp/ota-download.swu

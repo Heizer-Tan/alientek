@@ -225,6 +225,7 @@ PATH="${mockBin}:${PATH}" \
     >"${tempDir}/command.out"
 grep -Eq '"targetSlot":[[:space:]]*"B"' "${tempDir}/target-state.json"
 
+# 无参仅做恢复：短暂失败后重试成功即退出（不再常驻 MQTT）。
 set +e
 PATH="${mockBin}:${PATH}" \
     MOCK_FW_SETENV_LOG="${tempDir}/fw-setenv.log" \
@@ -235,13 +236,14 @@ PATH="${mockBin}:${PATH}" \
     BOARD_CMDLINE_FILE="${tempDir}/cmdline" \
     OTA_AGENT_STATE_FILE="${tempDir}/state.json" \
     OTA_AGENT_LOCK_FILE="${tempDir}/ota-agent.lock" \
-    timeout 3 stdbuf -o0 -e0 "${agentBinary}" \
+    timeout 5 stdbuf -o0 -e0 "${agentBinary}" \
     >"${tempDir}/startup.out" 2>"${tempDir}/startup.err"
 startupStatus="$?"
 set -e
-test "${startupStatus}" -eq 124
+test "${startupStatus}" -eq 0
 test -e "${tempDir}/active-read-failed"
 grep -q '判定 OTA 恢复结果失败' "${tempDir}/startup.err"
+grep -q 'ota-agent recovery mode' "${tempDir}/startup.out"
 grep -q '"requestId":"req-startup"' "${tempDir}/startup.out"
 grep -q '"phase":"committed"' "${tempDir}/startup.out"
 grep -Eq '"phase":[[:space:]]*"committed"' "${tempDir}/state.json"
@@ -260,12 +262,78 @@ PATH="${mockBin}:${PATH}" \
     BOARD_CMDLINE_FILE="${tempDir}/cmdline" \
     OTA_AGENT_STATE_FILE="${tempDir}/missing-state.json" \
     OTA_AGENT_LOCK_FILE="${tempDir}/ota-agent.lock" \
-    timeout 3 stdbuf -o0 -e0 "${agentBinary}" \
+    timeout 5 stdbuf -o0 -e0 "${agentBinary}" \
     >"${tempDir}/env-startup.out" 2>"${tempDir}/env-startup.err"
 envStartupStatus="$?"
 set -e
-test "${envStartupStatus}" -eq 124
+test "${envStartupStatus}" -eq 0
 grep -q '"requestId":"req-env"' "${tempDir}/env-startup.out"
 grep -q '"phase":"committed"' "${tempDir}/env-startup.out"
+
+# NFS 等非 mmc 根：有待恢复状态时必须快速跳过，不能卡死。
+cat >"${tempDir}/state-nfs.json" <<'EOF'
+{
+  "requestId": "req-nfs",
+  "version": "5.0.20",
+  "targetSlot": "B",
+  "phase": "upgrading",
+  "result": "",
+  "detail": "",
+  "autoReboot": 1
+}
+EOF
+printf '%s\n' 'console=ttymxc0 root=/dev/nfs rootwait' \
+    >"${tempDir}/cmdline-nfs"
+set +e
+PATH="${mockBin}:${PATH}" \
+    MOCK_ACTIVE_SLOT="B" \
+    MOCK_LAST_GOOD_SLOT="B" \
+    MOCK_UPGRADE_AVAILABLE="0" \
+    BOARD_CMDLINE_FILE="${tempDir}/cmdline-nfs" \
+    OTA_AGENT_STATE_FILE="${tempDir}/state-nfs.json" \
+    OTA_AGENT_LOCK_FILE="${tempDir}/ota-agent-nfs.lock" \
+    timeout 5 stdbuf -o0 -e0 "${agentBinary}" \
+    >"${tempDir}/nfs.out" 2>"${tempDir}/nfs.err"
+nfsStatus="$?"
+set -e
+test "${nfsStatus}" -eq 0
+grep -q '跳过 OTA 恢复' "${tempDir}/nfs.err"
+grep -Eq '"phase":[[:space:]]*"upgrading"' "${tempDir}/state-nfs.json"
+
+# 旧槽残留 upgrading，环境已 committed：应回写文件并快速退出。
+cat >"${tempDir}/state-stale.json" <<'EOF'
+{
+  "requestId": "req-stale",
+  "version": "9.9.9",
+  "targetSlot": "B",
+  "phase": "upgrading",
+  "result": "running",
+  "detail": "命令已解析",
+  "autoReboot": 1
+}
+EOF
+printf '%s\n' 'console=ttymxc0 root=/dev/mmcblk0p2 rootwait' \
+    >"${tempDir}/cmdline-stale"
+set +e
+PATH="${mockBin}:${PATH}" \
+    MOCK_ACTIVE_SLOT="B" \
+    MOCK_LAST_GOOD_SLOT="B" \
+    MOCK_UPGRADE_AVAILABLE="0" \
+    MOCK_OTA_REQUEST_ID="req-stale" \
+    MOCK_OTA_VERSION="9.9.9" \
+    MOCK_OTA_TARGET_SLOT="B" \
+    MOCK_OTA_PHASE="committed" \
+    MOCK_OTA_RESULT="success" \
+    MOCK_OTA_DETAIL="升级已提交" \
+    BOARD_CMDLINE_FILE="${tempDir}/cmdline-stale" \
+    OTA_AGENT_STATE_FILE="${tempDir}/state-stale.json" \
+    OTA_AGENT_LOCK_FILE="${tempDir}/ota-agent-stale.lock" \
+    timeout 5 stdbuf -o0 -e0 "${agentBinary}" \
+    >"${tempDir}/stale.out" 2>"${tempDir}/stale.err"
+staleStatus="$?"
+set -e
+test "${staleStatus}" -eq 0
+grep -q '残留 pending' "${tempDir}/stale.err"
+grep -Eq '"phase":[[:space:]]*"committed"' "${tempDir}/state-stale.json"
 
 echo "ota-agent recovery and final status passed"

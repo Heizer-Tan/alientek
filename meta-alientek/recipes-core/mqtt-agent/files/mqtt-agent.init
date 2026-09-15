@@ -1,0 +1,64 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          mqtt-agent
+# Required-Start:    $local_fs $network
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Board MQTT session agent
+### END INIT INFO
+
+set -eu
+
+NAME=mqtt-agent
+DAEMON=/usr/bin/mqtt-agent
+PIDFILE=/var/run/mqtt-agent.pid
+CONFIG=/etc/default/mqtt-agent
+OTA_BIN=/usr/bin/ota-agent
+
+[ -f "$CONFIG" ] && . "$CONFIG"
+[ -x "$DAEMON" ] || exit 0
+
+do_start() {
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "$NAME already running"
+		return 0
+	fi
+	# 先跑 ota-agent 无参：仅做 A/B 恢复后退出（超时兜底，避免卡启动）
+	if [ -x "$OTA_BIN" ]; then
+		if command -v timeout >/dev/null 2>&1; then
+			timeout 35 "$OTA_BIN" || true
+		else
+			"$OTA_BIN" || true
+		fi
+	fi
+	start-stop-daemon --start --quiet --background \
+		--make-pidfile --pidfile "$PIDFILE" \
+		--exec "$DAEMON"
+	echo "Started $NAME"
+}
+
+do_stop() {
+	start-stop-daemon --stop --quiet --pidfile "$PIDFILE" --retry 5 || true
+	rm -f "$PIDFILE"
+	echo "Stopped $NAME"
+}
+
+case "$1" in
+start) do_start ;;
+stop) do_stop ;;
+restart) do_stop; do_start ;;
+status)
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "$NAME is running"
+		exit 0
+	fi
+	echo "$NAME is not running"
+	exit 3
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart|status}"
+	exit 1
+	;;
+esac
+exit 0

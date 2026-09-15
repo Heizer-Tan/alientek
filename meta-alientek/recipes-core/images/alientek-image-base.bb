@@ -24,6 +24,7 @@ CORE_IMAGE_EXTRA_INSTALL += " \
     webserver \
     board-update-tools \
     ota-agent \
+    mqtt-agent \
     swupdate \
     sqlite3 \
     board-ntpdate \

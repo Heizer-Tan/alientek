@@ -832,6 +832,11 @@ int otaMqttPopCommand(char *buffer, size_t bufferSize)
     return 0;
 }
 
+int otaMqttIsConnected(void)
+{
+    return g_mqttConnected != 0 ? 1 : 0;
+}
+
 #else /* OTA_MQTT_BACKEND_STUB */
 
 #include <unistd.h>
@@ -889,6 +894,11 @@ int otaMqttPopCommand(char *buffer, size_t bufferSize)
     }
     errno = EAGAIN;
     return -1;
+}
+
+int otaMqttIsConnected(void)
+{
+    return 0;
 }
 
 #endif /* OTA_MQTT_BACKEND_PAHO */

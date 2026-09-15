@@ -1,9 +1,8 @@
-SUMMARY = "板端 MQTT OTA Agent"
+SUMMARY = "板端 OTA Agent（下载/校验/刷写/恢复，不连 MQTT）"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
-DEPENDS = "paho-mqtt-c"
-RDEPENDS:${PN} = "curl coreutils board-update-tools paho-mqtt-c"
+RDEPENDS:${PN} = "curl coreutils board-update-tools"
 
 SRC_URI = " \
     file://src/ota-agent.cpp \
@@ -17,18 +16,13 @@ SRC_URI = " \
     file://src/ota-mqtt.cpp \
     file://src/ota-mqtt.hpp \
     file://src/Makefile \
-    file://ota-agent.init \
     file://ota-agent.default \
 "
 
 S = "${WORKDIR}/src"
 
-inherit update-rc.d
-
-INITSCRIPT_NAME = "ota-agent"
-INITSCRIPT_PARAMS = "defaults"
-
-EXTRA_OEMAKE = "OTA_MQTT_BACKEND=paho"
+# MQTT 发布由 mqtt-agent 负责；本包仅保留 JSON 解析（stub 后端）
+EXTRA_OEMAKE = "OTA_MQTT_BACKEND=stub"
 
 do_compile() {
     oe_runmake
@@ -40,10 +34,6 @@ do_install() {
 
     install -d "${D}${localstatedir}/lib/ota-agent"
 
-    install -d "${D}${sysconfdir}/init.d"
-    install -m 0755 "${WORKDIR}/ota-agent.init" \
-        "${D}${sysconfdir}/init.d/ota-agent"
-
     install -d "${D}${sysconfdir}/default"
     install -m 0644 "${WORKDIR}/ota-agent.default" \
         "${D}${sysconfdir}/default/ota-agent"
@@ -51,6 +41,5 @@ do_install() {
 
 FILES:${PN} += " \
     ${sysconfdir}/default/ota-agent \
-    ${sysconfdir}/init.d/ota-agent \
     ${localstatedir}/lib/ota-agent \
 "
