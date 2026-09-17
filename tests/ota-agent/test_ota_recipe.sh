@@ -17,8 +17,9 @@ do
     test -f "${sourceFile}"
 done
 
-grep -q 'ota-agent' "${image}"
-grep -q 'mqtt-agent' "${image}"
+grep -q 'ota-agent' meta-alientek/recipes-core/packagegroups/packagegroup-alientek-core.bb
+grep -q 'mqtt-agent' meta-alientek/recipes-core/packagegroups/packagegroup-alientek-core.bb
+grep -q 'packagegroup-alientek-core' "${image}"
 grep -q 'EXTRA_OEMAKE = "OTA_MQTT_BACKEND=stub"' "${recipe}"
 grep -q 'paho-mqtt-c' meta-alientek/recipes-core/mqtt-agent/mqtt-agent_1.0.bb
 grep -q '${bindir}/ota-agent' "${recipe}"

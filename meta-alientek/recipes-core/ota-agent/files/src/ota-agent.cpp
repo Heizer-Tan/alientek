@@ -126,10 +126,12 @@ static void emitMqttStatus(OtaState *state, const char *phase,
         fprintf(stderr, "生成 MQTT 状态失败: %s\n", strerror(errno));
         return;
     }
-    /* 状态交给 mqtt-agent 从 stdout 转发；管道下须立刻刷出，否则 accepted 会卡到下载结束。 */
+    /* 状态交给 mqtt-agent 从 stdout 转发；stderr 同步打一份便于串口确认时机。 */
     (void)topic;
     puts(payload);
     fflush(stdout);
+    fprintf(stderr, "ota-agent status: %s\n", payload);
+    fflush(stderr);
 }
 
 static int compareVersionToken(const char **versionText)
@@ -170,6 +172,39 @@ static int rejectMqttCommand(OtaState *state, const char *detail, int exitCode)
     return exitCode;
 }
 
+/* 只做解析/校验并立刻退出：与「重复 requestId」相同，靠进程结束把 status 刷出管道。 */
+static int executeMqttPrecheck(const char *jsonText)
+{
+    const char *statePath = otaReadPathSetting(
+        "OTA_AGENT_STATE_FILE", "/var/lib/ota-agent/state.json");
+    OtaMqttCommand command;
+    OtaState state;
+    OtaState previousState;
+    char errorBuf[256];
+    char currentVersion[32];
+
+    memset(&state, 0, sizeof(state));
+    if (jsonText == NULL ||
+        otaMqttParseCommandJson(jsonText, &state, &command) != 0) {
+        (void)snprintf(state.detail, sizeof(state.detail), "%s",
+                       "MQTT OTA 命令 JSON 无效");
+        return rejectMqttCommand(&state, state.detail, 2);
+    }
+    if (loadStateForApply(statePath, &previousState, errorBuf,
+                          sizeof(errorBuf)) != 0) {
+        return rejectMqttCommand(&state, errorBuf, 1);
+    }
+    if (otaStateRequestSeen(&previousState, state.requestId) != 0) {
+        return rejectMqttCommand(&state, "重复 requestId，拒绝执行", 1);
+    }
+    if (otaReadCurrentVersion(currentVersion, sizeof(currentVersion)) == 0 &&
+        compareVersions(state.version, currentVersion) <= 0) {
+        return rejectMqttCommand(&state, "目标版本不高于当前版本，拒绝执行", 1);
+    }
+    emitMqttStatus(&state, "accepted", "running", "命令已解析");
+    return 0;
+}
+
 static int executeMqttCommandJson(const char *jsonText,
                                   const char *downloadPath)
 {
@@ -177,6 +212,7 @@ static int executeMqttCommandJson(const char *jsonText,
         "OTA_AGENT_LOCK_FILE", "/var/run/ota-agent.lock");
     const char *statePath = otaReadPathSetting(
         "OTA_AGENT_STATE_FILE", "/var/lib/ota-agent/state.json");
+    const char *skipAccepted = getenv("OTA_MQTT_SKIP_ACCEPTED");
     OtaMqttCommand command;
     OtaState state;
     OtaState previousState;
@@ -203,6 +239,10 @@ static int executeMqttCommandJson(const char *jsonText,
         compareVersions(state.version, currentVersion) <= 0) {
         return rejectMqttCommand(&state, "目标版本不高于当前版本，拒绝执行", 1);
     }
+    /* mqtt-agent 已用 --mqtt-precheck 发过 accepted 时跳过，避免重复。 */
+    if (skipAccepted == NULL || skipAccepted[0] == '\0') {
+        emitMqttStatus(&state, "accepted", "running", "命令已解析");
+    }
     lockFd = otaStateAcquireLock(lockPath);
     if (lockFd < 0) {
         return rejectMqttCommand(&state, "ota-agent busy", 1);
@@ -212,7 +252,6 @@ static int executeMqttCommandJson(const char *jsonText,
         otaStateReleaseLock(lockFd, lockPath);
         return rejectMqttCommand(&state, errorBuf, 1);
     }
-    emitMqttStatus(&state, "accepted", "running", "命令已解析");
     result = executeApplyPipeline(command.url, command.sha256, downloadPath,
                                   state.autoReboot, statePath, &state,
                                   errorBuf, sizeof(errorBuf));
@@ -221,6 +260,15 @@ static int executeMqttCommandJson(const char *jsonText,
                    result == 0 ? "升级命令已执行" : errorBuf);
     otaStateReleaseLock(lockFd, lockPath);
     return result == 0 ? 0 : 1;
+}
+
+static int otaAgentRunMqttPrecheck(int argc, char **argv)
+{
+    if (argc != 3) {
+        fprintf(stderr, "用法: %s --mqtt-precheck '<json>'\n", argv[0]);
+        return 2;
+    }
+    return executeMqttPrecheck(argv[2]);
 }
 
 static int otaAgentRunMqttCommand(int argc, char **argv)
@@ -380,10 +428,15 @@ int otaAgentRunRecovery(void)
 
 int main(int argc, char **argv)
 {
+    /* 被 mqtt-agent 管道拉起时须无缓冲，否则 status 会攒到进程结束才发出。 */
+    setvbuf(stdout, NULL, _IONBF, 0);
     loadAgentDefaultFile();
     if (argc > 1) {
         if (strcmp(argv[1], "--apply") == 0) {
             return otaAgentRunApply(argc, argv);
+        }
+        if (strcmp(argv[1], "--mqtt-precheck") == 0) {
+            return otaAgentRunMqttPrecheck(argc, argv);
         }
         if (strcmp(argv[1], "--mqtt-command") == 0) {
             return otaAgentRunMqttCommand(argc, argv);

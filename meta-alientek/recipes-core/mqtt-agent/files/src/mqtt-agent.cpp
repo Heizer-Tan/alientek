@@ -25,6 +25,8 @@ static int g_mqttPort = 1883;
 static int g_mqttAutoMode = 1;
 static int g_heartbeatSec = 30;
 static int g_otaBusy = 0;
+static int g_otaPipeFd = -1;
+static pid_t g_otaPid = -1;
 static char g_mqttClientId[96] = "ota-agent";
 static char g_commandTopic[192] = "device/ota/command";
 static char g_statusTopic[192] = "device/ota/status";
@@ -32,6 +34,8 @@ static char g_heartbeatTopic[192] = "device/heartbeat";
 static char g_fixedHost[64];
 static char g_otaBin[256] = "/usr/bin/ota-agent";
 static char g_downloadPath[256] = "/var/tmp/ota-download.swu";
+static char g_otaLineBuf[1024];
+static size_t g_otaLineLen = 0;
 static time_t g_lastDiscoverAt = 0;
 static time_t g_lastHeartbeatAt = 0;
 
@@ -307,40 +311,220 @@ static void forwardStatusLine(const char *line)
     }
 }
 
-static void runOtaCommand(const char *jsonText)
+/* 短跑 precheck：fork/exec，子进程 emit 后退出；与「重复 requestId」同样靠 EOF 立刻转发。 */
+static int runOtaPrecheck(const char *jsonText)
 {
-    char command[8192];
+    int pipefds[2];
+    pid_t pid;
     FILE *pipeFile;
     char line[1024];
-    int written;
+    int status;
+    int fd;
+    long openMax;
 
-    if (g_otaBusy != 0) {
-        fprintf(stderr, "ota-agent 忙，丢弃命令\n");
-        return;
+    fprintf(stderr, "mqtt-agent: PRECHECK begin\n");
+    if (pipe(pipefds) != 0) {
+        fprintf(stderr, "precheck 创建管道失败: %s\n", strerror(errno));
+        return -1;
     }
-    written = snprintf(command, sizeof(command),
-                       "%s --mqtt-command '%s' '%s'", g_otaBin, jsonText,
-                       g_downloadPath);
-    if (written < 0 || (size_t)written >= sizeof(command)) {
-        fprintf(stderr, "命令过长，无法执行 ota-agent\n");
-        return;
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "precheck fork 失败: %s\n", strerror(errno));
+        (void)close(pipefds[0]);
+        (void)close(pipefds[1]);
+        return -1;
     }
-    g_otaBusy = 1;
-    pipeFile = popen(command, "r");
+    if (pid == 0) {
+        (void)close(pipefds[0]);
+        if (dup2(pipefds[1], STDOUT_FILENO) < 0) {
+            _exit(127);
+        }
+        (void)close(pipefds[1]);
+        openMax = sysconf(_SC_OPEN_MAX);
+        if (openMax < 0 || openMax > 1024) {
+            openMax = 1024;
+        }
+        for (fd = 3; fd < (int)openMax; ++fd) {
+            (void)close(fd);
+        }
+        execl(g_otaBin, g_otaBin, "--mqtt-precheck", jsonText, (char *)NULL);
+        _exit(127);
+    }
+    (void)close(pipefds[1]);
+    pipeFile = fdopen(pipefds[0], "r");
     if (pipeFile == NULL) {
-        fprintf(stderr, "启动 ota-agent 失败: %s\n", strerror(errno));
-        g_otaBusy = 0;
-        return;
+        fprintf(stderr, "precheck fdopen 失败: %s\n", strerror(errno));
+        (void)close(pipefds[0]);
+        (void)kill(pid, SIGTERM);
+        (void)waitpid(pid, NULL, 0);
+        return -1;
     }
     while (fgets(line, sizeof(line), pipeFile) != NULL) {
         size_t length = strcspn(line, "\r\n");
 
         line[length] = '\0';
         puts(line);
+        fflush(stdout);
+        fprintf(stderr, "mqtt-agent: PRECHECK line: %s\n", line);
+        fflush(stderr);
         forwardStatusLine(line);
     }
-    (void)pclose(pipeFile);
+    (void)fclose(pipeFile);
+    if (waitpid(pid, &status, 0) < 0) {
+        fprintf(stderr, "precheck waitpid 失败: %s\n", strerror(errno));
+        return -1;
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr, "mqtt-agent: PRECHECK fail exit=%d\n",
+                WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+        return -1;
+    }
+    fprintf(stderr, "mqtt-agent: PRECHECK ok\n");
+    return 0;
+}
+
+static void finishOtaChild(void)
+{
+    int status = 0;
+
+    if (g_otaPipeFd >= 0) {
+        (void)close(g_otaPipeFd);
+        g_otaPipeFd = -1;
+    }
+    if (g_otaPid > 0) {
+        (void)waitpid(g_otaPid, &status, 0);
+        g_otaPid = -1;
+    }
+    g_otaLineLen = 0;
     g_otaBusy = 0;
+}
+
+static void emitOtaLine(void)
+{
+    if (g_otaLineLen == 0) {
+        return;
+    }
+    g_otaLineBuf[g_otaLineLen] = '\0';
+    puts(g_otaLineBuf);
+    fflush(stdout);
+    forwardStatusLine(g_otaLineBuf);
+    g_otaLineLen = 0;
+}
+
+static void consumeOtaChunk(const char *chunk, size_t chunkLen)
+{
+    size_t index;
+
+    for (index = 0; index < chunkLen; ++index) {
+        char character = chunk[index];
+
+        if (character == '\n' || character == '\r') {
+            emitOtaLine();
+            continue;
+        }
+        if (g_otaLineLen + 1 < sizeof(g_otaLineBuf)) {
+            g_otaLineBuf[g_otaLineLen++] = character;
+        }
+    }
+}
+
+static void pollOtaOutput(void)
+{
+    char buffer[256];
+    ssize_t readSize;
+
+    if (g_otaPipeFd < 0) {
+        return;
+    }
+    for (;;) {
+        readSize = read(g_otaPipeFd, buffer, sizeof(buffer));
+        if (readSize > 0) {
+            consumeOtaChunk(buffer, (size_t)readSize);
+            continue;
+        }
+        if (readSize == 0) {
+            emitOtaLine();
+            finishOtaChild();
+            return;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return;
+        }
+        fprintf(stderr, "读 ota-agent 输出失败: %s\n", strerror(errno));
+        finishOtaChild();
+        return;
+    }
+}
+
+static int startOtaChild(const char *jsonText)
+{
+    int pipefds[2];
+    pid_t pid;
+
+    if (pipe(pipefds) != 0) {
+        fprintf(stderr, "创建管道失败: %s\n", strerror(errno));
+        return -1;
+    }
+    pid = fork();
+    if (pid < 0) {
+        fprintf(stderr, "fork ota-agent 失败: %s\n", strerror(errno));
+        (void)close(pipefds[0]);
+        (void)close(pipefds[1]);
+        return -1;
+    }
+    if (pid == 0) {
+        int fd;
+        long openMax;
+
+        (void)close(pipefds[0]);
+        if (dup2(pipefds[1], STDOUT_FILENO) < 0) {
+            _exit(127);
+        }
+        (void)close(pipefds[1]);
+        /* 关掉继承的 MQTT 套接字等，避免子进程拖垮父进程会话。 */
+        openMax = sysconf(_SC_OPEN_MAX);
+        if (openMax < 0 || openMax > 1024) {
+            openMax = 1024;
+        }
+        for (fd = 3; fd < (int)openMax; ++fd) {
+            (void)close(fd);
+        }
+        /* 已在 precheck 发过 accepted，升级进程不再重复发。 */
+        (void)setenv("OTA_MQTT_SKIP_ACCEPTED", "1", 1);
+        execl(g_otaBin, g_otaBin, "--mqtt-command", jsonText, g_downloadPath,
+              (char *)NULL);
+        _exit(127);
+    }
+    (void)close(pipefds[1]);
+    if (setNonBlock(pipefds[0]) != 0) {
+        fprintf(stderr, "设置管道非阻塞失败: %s\n", strerror(errno));
+        (void)close(pipefds[0]);
+        (void)kill(pid, SIGTERM);
+        (void)waitpid(pid, NULL, 0);
+        return -1;
+    }
+    g_otaPipeFd = pipefds[0];
+    g_otaPid = pid;
+    g_otaLineLen = 0;
+    g_otaBusy = 1;
+    fprintf(stderr, "mqtt-agent: 异步启动 ota-agent 升级 pid=%ld\n",
+            (long)pid);
+    return 0;
+}
+
+static void startOtaCommand(const char *jsonText)
+{
+    if (g_otaBusy != 0) {
+        fprintf(stderr, "ota-agent 忙，丢弃命令\n");
+        return;
+    }
+    if (runOtaPrecheck(jsonText) != 0) {
+        return;
+    }
+    (void)startOtaChild(jsonText);
 }
 
 static void processCommand(void)
@@ -350,7 +534,7 @@ static void processCommand(void)
     if (g_otaBusy != 0 || otaMqttPopCommand(jsonText, sizeof(jsonText)) != 0) {
         return;
     }
-    runOtaCommand(jsonText);
+    startOtaCommand(jsonText);
 }
 
 static void maybeHeartbeat(void)
@@ -426,14 +610,16 @@ int main(void)
     (void)sigaction(SIGTERM, &action, NULL);
 
     puts("mqtt-agent foreground mode");
+    fprintf(stderr, "mqtt-agent: precheck+async-ota enabled\n");
     ensureSession();
     while (g_stopRequested == 0) {
+        processCommand();
+        pollOtaOutput();
+        maybeHeartbeat();
         if (g_mqttAutoMode != 0) {
             ensureSession();
         }
-        (void)otaMqttYield(1000);
-        processCommand();
-        maybeHeartbeat();
+        (void)otaMqttYield(200);
     }
     return 0;
 }

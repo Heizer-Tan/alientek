@@ -26,7 +26,8 @@ trap cleanup EXIT INT TERM
 # 组装可在宿主编译的 mqtt-agent（stub，无 paho）
 cp "${sourceDir}/mqtt-agent.cpp" "${sourceDir}/Makefile" "${tempDir}/"
 cp "${otaSrc}/ota-mqtt.cpp" "${otaSrc}/ota-mqtt.hpp" \
-    "${otaSrc}/ota-state.cpp" "${otaSrc}/ota-state.hpp" "${tempDir}/"
+    "${otaSrc}/ota-state.cpp" "${otaSrc}/ota-state.hpp" \
+    "${otaSrc}/ota-defaults.cpp" "${otaSrc}/ota-defaults.hpp" "${tempDir}/"
 make -C "${tempDir}" OTA_MQTT_BACKEND=stub \
     CXXFLAGS='-O2 -Wall -Wextra -Werror -std=c++17' >/dev/null
 
