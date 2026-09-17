@@ -12,8 +12,8 @@ need "README.md"
 if [[ -f "$root/kas/alientek-alpha.yml" ]]; then
   grep -q "machine: imx6ull-alientek-alpha" "$root/kas/alientek-alpha.yml" \
     || fail "kas 未设置 machine"
-  grep -q "alientek-image-base" "$root/kas/alientek-alpha.yml" \
-    || fail "kas 未设置镜像目标"
+  grep -q "alientek-image-update" "$root/kas/alientek-alpha.yml" \
+    || fail "kas 未设置镜像目标 alientek-image-update"
   grep -q 'IMX_DEFAULT_BSP = "mainline"' "$root/kas/alientek-alpha.yml" \
     || fail "kas 未锁定主线 BSP"
   n_scarthgap=$(grep -c "branch: scarthgap" "$root/kas/alientek-alpha.yml" || true)
@@ -50,10 +50,8 @@ need "meta-alientek/recipes-core/images/alientek-image-base.bb"
 img="$root/meta-alientek/recipes-core/images/alientek-image-base.bb"
 if [[ -f "$img" ]]; then
   grep -q "core-image-base" "$img" || fail "镜像未继承 core-image-base"
-  grep -q "openssh" "$img" || fail "镜像缺少 openssh"
-  grep -q "ethtool" "$img" || fail "镜像缺少 ethtool"
-  grep -q "iproute2" "$img" || fail "镜像缺少 iproute2"
-  grep -q "iputils" "$img" || fail "镜像缺少 iputils"
+  grep -q "packagegroup-alientek-core" "$img" || fail "镜像缺少 packagegroup-alientek-core"
+  grep -q "ssh-server-openssh\|openssh" "$img" || fail "镜像缺少 openssh"
 fi
 
 need "meta-alientek/recipes-kernel/linux/linux_7.2.bb"

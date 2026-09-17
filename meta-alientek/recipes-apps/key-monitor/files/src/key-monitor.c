@@ -6,11 +6,11 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
-#include <dirent.h>
+#include "input-device.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
-#include <limits.h>
 #include <linux/input.h>
 #include <signal.h>
 #include <stdio.h>
@@ -20,8 +20,6 @@
 #include <unistd.h>
 
 #define DEFAULT_NAME_SUBSTR "gpio-keys"
-#define INPUT_DIR "/dev/input"
-#define EVENT_PREFIX "event"
 
 static volatile sig_atomic_t gStopFlag = 0;
 static int gUseSyslog = 0;
@@ -64,50 +62,6 @@ static int openDevicePath(const char *path)
 		return -1;
 	}
 	return fd;
-}
-
-/* 若设备名包含 nameSubstr 则返回 1 */
-static int nameMatches(int fd, const char *nameSubstr)
-{
-	char name[256];
-
-	memset(name, 0, sizeof(name));
-	if (ioctl(fd, EVIOCGNAME(sizeof(name)), name) < 0)
-		return 0;
-	return strstr(name, nameSubstr) != NULL;
-}
-
-/* 在 /dev/input 中按名称子串查找 event 设备，找到则返回已打开 fd */
-static int findDeviceByName(const char *nameSubstr)
-{
-	DIR *dir = opendir(INPUT_DIR);
-	struct dirent *ent;
-	char path[PATH_MAX];
-
-	if (!dir) {
-		fprintf(stderr, "key-monitor: opendir %s: %s\n", INPUT_DIR, strerror(errno));
-		return -1;
-	}
-
-	while ((ent = readdir(dir)) != NULL) {
-		int fd;
-
-		if (strncmp(ent->d_name, EVENT_PREFIX, strlen(EVENT_PREFIX)) != 0)
-			continue;
-		snprintf(path, sizeof(path), "%s/%s", INPUT_DIR, ent->d_name);
-		fd = open(path, O_RDONLY);
-		if (fd < 0)
-			continue;
-		if (nameMatches(fd, nameSubstr)) {
-			closedir(dir);
-			return fd;
-		}
-		close(fd);
-	}
-
-	closedir(dir);
-	fprintf(stderr, "key-monitor: no input device matching \"%s\"\n", nameSubstr);
-	return -1;
 }
 
 /* 解析参数；成功返回 0，失败返回 1 */
@@ -198,7 +152,7 @@ int main(int argc, char **argv)
 	if (devPath)
 		gInputFd = openDevicePath(devPath);
 	else
-		gInputFd = findDeviceByName(nameSubstr);
+		gInputFd = inputFindDeviceByName(nameSubstr, "key-monitor", 0);
 
 	if (gInputFd < 0) {
 		if (gUseSyslog)

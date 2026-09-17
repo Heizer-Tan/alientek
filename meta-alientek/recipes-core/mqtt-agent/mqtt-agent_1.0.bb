@@ -14,6 +14,8 @@ SRC_URI = " \
     file://ota-mqtt.hpp \
     file://ota-state.cpp \
     file://ota-state.hpp \
+    file://ota-defaults.cpp \
+    file://ota-defaults.hpp \
     file://mqtt-agent.init \
     file://mqtt-agent.default \
 "
@@ -29,7 +31,8 @@ EXTRA_OEMAKE = "OTA_MQTT_BACKEND=paho"
 do_configure() {
     # FILESEXTRAPATHS 拉来的 ota-* 在 ${WORKDIR}，与 mqtt-agent 源码对齐到 ${S}
     cp -f "${WORKDIR}/ota-mqtt.cpp" "${WORKDIR}/ota-mqtt.hpp" \
-        "${WORKDIR}/ota-state.cpp" "${WORKDIR}/ota-state.hpp" "${S}/"
+        "${WORKDIR}/ota-state.cpp" "${WORKDIR}/ota-state.hpp" \
+        "${WORKDIR}/ota-defaults.cpp" "${WORKDIR}/ota-defaults.hpp" "${S}/"
 }
 
 do_compile() {

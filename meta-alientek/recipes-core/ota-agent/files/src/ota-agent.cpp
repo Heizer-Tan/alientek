@@ -1,101 +1,24 @@
 #include "ota-agent.hpp"
 
+#include "ota-defaults.hpp"
 #include "ota-download.hpp"
 #include "ota-exec.hpp"
 #include "ota-mqtt.hpp"
 #include "ota-state.hpp"
 
-#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-static const char *readPathSetting(const char *name, const char *defaultPath)
-{
-    const char *path = getenv(name);
-
-    if (path == NULL || path[0] == '\0') {
-        return defaultPath;
-    }
-    return path;
-}
-
-static char *trimInPlace(char *text)
-{
-    char *end;
-
-    while (*text != '\0' && isspace((unsigned char)*text)) {
-        ++text;
-    }
-    if (*text == '\0') {
-        return text;
-    }
-    end = text + strlen(text) - 1;
-    while (end > text && isspace((unsigned char)*end)) {
-        *end = '\0';
-        --end;
-    }
-    return text;
-}
-
-static int applyDefaultAssignment(char *line)
-{
-    char *equals;
-    char *key;
-    char *value;
-    const char *existing;
-
-    line = trimInPlace(line);
-    if (line[0] == '\0' || line[0] == '#') {
-        return 0;
-    }
-    if (strncmp(line, "export ", 7) == 0) {
-        line = trimInPlace(line + 7);
-    }
-    equals = strchr(line, '=');
-    if (equals == NULL || equals == line) {
-        return 0;
-    }
-    *equals = '\0';
-    key = trimInPlace(line);
-    value = trimInPlace(equals + 1);
-    if (value[0] == '"' || value[0] == '\'') {
-        char quote = value[0];
-        size_t length = strlen(value);
-
-        if (length >= 2U && value[length - 1U] == quote) {
-            value[length - 1U] = '\0';
-            ++value;
-        }
-    }
-    if (key[0] == '\0') {
-        return 0;
-    }
-    existing = getenv(key);
-    if (existing != NULL && existing[0] != '\0') {
-        return 0;
-    }
-    return setenv(key, value, 0) == 0 ? 0 : -1;
-}
-
 /* 直接运行 ota-agent 时也加载 /etc/default/ota-agent，避免每次手动 export。 */
 static void loadAgentDefaultFile(void)
 {
-    const char *configPath = readPathSetting(
-        "OTA_AGENT_CONFIG_FILE", "/etc/default/ota-agent");
-    char line[512];
-    FILE *file = fopen(configPath, "r");
-
-    if (file == NULL) {
-        return;
-    }
-    while (fgets(line, sizeof(line), file) != NULL) {
-        (void)applyDefaultAssignment(line);
-    }
-    (void)fclose(file);
+    otaLoadDefaultFile(otaReadPathSetting(
+        "OTA_AGENT_CONFIG_FILE", "/etc/default/ota-agent"));
 }
+
 
 static int loadStateForApply(const char *statePath, OtaState *state,
                              char *errorBuf, size_t errorBufSize)
@@ -154,9 +77,9 @@ static int executeApplyPipeline(const char *url, const char *sha256,
 
 static int otaAgentRunApply(int argc, char **argv)
 {
-    const char *lockPath = readPathSetting(
+    const char *lockPath = otaReadPathSetting(
         "OTA_AGENT_LOCK_FILE", "/var/run/ota-agent.lock");
-    const char *statePath = readPathSetting(
+    const char *statePath = otaReadPathSetting(
         "OTA_AGENT_STATE_FILE", "/var/lib/ota-agent/state.json");
     char errorBuf[256];
     OtaState state;
@@ -192,7 +115,7 @@ static int otaAgentRunApply(int argc, char **argv)
 static void emitMqttStatus(OtaState *state, const char *phase,
                            const char *result, const char *detail)
 {
-    const char *topic = readPathSetting(
+    const char *topic = otaReadPathSetting(
         "OTA_MQTT_STATUS_TOPIC", "device/ota/status");
     char payload[512];
 
@@ -203,9 +126,10 @@ static void emitMqttStatus(OtaState *state, const char *phase,
         fprintf(stderr, "生成 MQTT 状态失败: %s\n", strerror(errno));
         return;
     }
-    /* 状态交给 mqtt-agent 从 stdout 转发；此处只打印。 */
+    /* 状态交给 mqtt-agent 从 stdout 转发；管道下须立刻刷出，否则 accepted 会卡到下载结束。 */
     (void)topic;
     puts(payload);
+    fflush(stdout);
 }
 
 static int compareVersionToken(const char **versionText)
@@ -249,9 +173,9 @@ static int rejectMqttCommand(OtaState *state, const char *detail, int exitCode)
 static int executeMqttCommandJson(const char *jsonText,
                                   const char *downloadPath)
 {
-    const char *lockPath = readPathSetting(
+    const char *lockPath = otaReadPathSetting(
         "OTA_AGENT_LOCK_FILE", "/var/run/ota-agent.lock");
-    const char *statePath = readPathSetting(
+    const char *statePath = otaReadPathSetting(
         "OTA_AGENT_STATE_FILE", "/var/lib/ota-agent/state.json");
     OtaMqttCommand command;
     OtaState state;
@@ -446,7 +370,7 @@ static void completeStartupRecovery(const char *statePath)
 
 int otaAgentRunRecovery(void)
 {
-    const char *statePath = readPathSetting(
+    const char *statePath = otaReadPathSetting(
         "OTA_AGENT_STATE_FILE", "/var/lib/ota-agent/state.json");
 
     puts("ota-agent recovery mode");

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-// 仅 U-Boot：与板级 dtsi 一致的 eth 别名，并给 LAN8720 补复位脚。
+// 仅 U-Boot：与板级 dtsi 一致的 eth 别名，并给 KSZ8081 补复位脚。
 // 不要关掉 fec2（MDIO 在 ENET2 引脚上）。
 
 / {

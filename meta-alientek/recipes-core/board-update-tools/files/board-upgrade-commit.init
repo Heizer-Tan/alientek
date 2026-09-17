@@ -1,14 +1,27 @@
 #!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          board-upgrade-commit
-# Required-Start:    $local_fs
+# Required-Start:    $local_fs $network
 # Required-Stop:
 # Default-Start:     2 3 4 5
 # Default-Stop:
-# Short-Description: 首启成功后提交升级槽位
+# Short-Description: 首启成功后提交升级槽位（含可选健康检查）
 ### END INIT INFO
 
 set -eu
+
+DEFAULTS_FILE="${BOARD_UPGRADE_COMMIT_DEFAULTS:-/etc/default/board-upgrade-commit}"
+
+# 加载板级默认配置（可覆盖健康检查开关与命令）
+loadDefaults() {
+    if [ -f "${DEFAULTS_FILE}" ]; then
+        # shellcheck disable=SC1090
+        . "${DEFAULTS_FILE}"
+    fi
+    BOARD_UPGRADE_HEALTH_ENABLE="${BOARD_UPGRADE_HEALTH_ENABLE:-1}"
+    BOARD_UPGRADE_HEALTH_CMD="${BOARD_UPGRADE_HEALTH_CMD:-/usr/sbin/board-upgrade-healthcheck}"
+    BOARD_UPGRADE_ROLLBACK_ON_FAIL="${BOARD_UPGRADE_ROLLBACK_ON_FAIL:-1}"
+}
 
 logMsg() {
     logger -t board-upgrade-commit "$1"
@@ -21,13 +34,70 @@ readEnvOrDefault() {
     fw_printenv -n "${envName}" 2>/dev/null || printf '%s\n' "${defaultValue}"
 }
 
+# 健康检查失败时切回 last_good_slot 并请求重启
+rollbackFailedSlot() {
+    activeSlot="$(readEnvOrDefault active_slot A)"
+    lastGood="$(readEnvOrDefault last_good_slot "")"
+    if [ -z "${lastGood}" ] || [ "${lastGood}" = "${activeSlot}" ]; then
+        if [ "${activeSlot}" = "B" ]; then
+            lastGood="A"
+        else
+            lastGood="B"
+        fi
+    fi
+    fw_setenv active_slot "${lastGood}"
+    fw_setenv upgrade_available 0
+    fw_setenv bootcount 0
+    fw_setenv ota_phase failed
+    fw_setenv ota_result error
+    fw_setenv ota_detail "健康检查失败，已回滚到 ${lastGood}"
+    logMsg "健康检查失败，已回滚到槽位 ${lastGood}，即将重启"
+    if [ "${BOARD_UPGRADE_SKIP_SYNC:-0}" != "1" ]; then
+        sync
+    fi
+    reboot
+}
+
+runHealthCheck() {
+    healthRc=0
+
+    if [ "${BOARD_UPGRADE_HEALTH_ENABLE}" != "1" ]; then
+        logMsg "健康检查已关闭，跳过"
+        return 0
+    fi
+    if [ ! -x "${BOARD_UPGRADE_HEALTH_CMD}" ]; then
+        logMsg "健康检查命令不可执行: ${BOARD_UPGRADE_HEALTH_CMD}，视为通过"
+        return 0
+    fi
+    set +e
+    "${BOARD_UPGRADE_HEALTH_CMD}"
+    healthRc=$?
+    set -e
+    if [ "${healthRc}" -eq 0 ]; then
+        logMsg "健康检查通过"
+        return 0
+    fi
+    logMsg "健康检查失败（退出码 ${healthRc}）"
+    return 1
+}
+
 commitSlot() {
+    loadDefaults
     activeSlot="$(readEnvOrDefault active_slot A)"
     upgradeAvailable="$(readEnvOrDefault upgrade_available 0)"
 
     if [ "${upgradeAvailable}" != "1" ]; then
         logMsg "当前无需提交槽位，active_slot=${activeSlot}"
         return 0
+    fi
+
+    if ! runHealthCheck; then
+        if [ "${BOARD_UPGRADE_ROLLBACK_ON_FAIL}" = "1" ]; then
+            rollbackFailedSlot
+            return 1
+        fi
+        logMsg "健康检查失败且未启用回滚，保留 upgrade_available=1"
+        return 1
     fi
 
     fw_setenv bootcount 0

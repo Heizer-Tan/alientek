@@ -17,6 +17,14 @@
 
 构建入口：`./scripts/build.sh` → `kas-container` + `kas/alientek-alpha.yml`。升级功能额外引入 `meta-swupdate`。
 
+进入交互式 bitbake 环境：
+
+```bash
+./scripts/kas-shell.sh
+# 或单次命令：
+./scripts/kas-shell.sh -c 'bitbake -c cleansstate python3'
+```
+
 当前板级功能总览见 `docs/board-function-overview.md`，SWUpdate 板端升级/回滚实测步骤见 `docs/swu-upgrade-validation.md`。
 
 ## 依赖
@@ -79,7 +87,7 @@ docker tag ghcr.nju.edu.cn/siemens/kas/kas:5.5 ghcr.io/siemens/kas/kas:5.5
 KAS_USE_HOST=1 ./scripts/build.sh
 ```
 
-产物在 kas 工作区的 `build/tmp/deploy/images/imx6ull-alientek-alpha/`：`u-boot.imx`、`zImage`、`imx6ull-alientek-alpha.dtb`、`alientek-image-base-imx6ull-alientek-alpha.rootfs.wic`。若构建 `alientek-image-update`，还会生成单文件升级包 `*.swu`。
+默认目标为 `alientek-image-update`（`kas/alientek-alpha.yml` 与 `./scripts/build.sh` 一致）：产物在 `build/tmp/deploy/images/imx6ull-alientek-alpha/`，含 `u-boot.imx`、`zImage`、`imx6ull-alientek-alpha.dtb`、`alientek-image-base-*.rootfs.wic`（update 依赖 base）以及单文件升级包 `*.swu`。仅要 rootfs/wic 时可显式指定：`./scripts/build.sh alientek-image-base`。
 
 上游层固定 **scarthgap**（见 `kas/alientek-alpha.yml`）；三层分支须一致，不要混用。
 
@@ -187,7 +195,7 @@ fw_printenv upgrade_available
 fw_printenv bootcount
 ```
 
-当前板级 `boot.scr` 会按 `active_slot` 在 `/dev/mmcblk0p2` 与 `/dev/mmcblk0p3` 间切换；这是因为现有 U-Boot 配置未启用 `part` 命令，暂未使用 `PARTUUID` 方式传根分区。
+当前板级 `boot.scr` 会按 `active_slot` 选择根分区：优先使用 U-Boot 环境中的 `rootfs_a_partuuid` / `rootfs_b_partuuid`（`part uuid mmc 0:2/3`，需 `CONFIG_CMD_PART`），未缓存时回退 `/dev/mmcblk0p2` 与 `/dev/mmcblk0p3`。
 
 ## MQTT OTA
 
@@ -203,6 +211,22 @@ fw_printenv bootcount
 ## 按键演示（key-monitor）
 
 串口登录后：`key-monitor`（自动找 `gpio-keys`），按 KEY0 会打印 `type=1 code=28 value=1/0`。可选自启：`update-rc.d key-monitor defaults && /etc/init.d/key-monitor start`（写 syslog）。
+
+## 触摸演示（touch-monitor）
+
+对应设备树 `gt9147@5d`（Goodix，INT=`GPIO1_IO09`）。串口登录后：
+
+```bash
+# 原始事件流 + 每帧摘要
+touch-monitor
+# 仅摘要（手指移动时持续刷 x/y）
+touch-monitor -S
+# 指定设备
+touch-monitor -d /dev/input/event2
+cat /proc/bus/input/devices   # 确认 Goodix 节点
+```
+
+需内核含 `CONFIG_TOUCHSCREEN_GOODIX`（见 `recipes-kernel/linux/linux/touch.cfg`），且电阻屏 `&tsc` 已关闭以免抢 INT 脚。
 
 ## AP3216C 演示
 

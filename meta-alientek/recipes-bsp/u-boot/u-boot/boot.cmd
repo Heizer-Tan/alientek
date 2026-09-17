@@ -22,9 +22,11 @@ if test -z "${eth1addr}"; then setenv eth1addr 02:11:22:33:44:56; fi
 setenv ethprime eth0
 setenv ethact eth0
 
-# A/B helpers for manual run mmcboot (p2=rootfsA, p3=rootfsB)
+# A/B：优先 PARTUUID（part uuid 需 CONFIG_CMD_PART）；未缓存时回退 mmcblk0pN
+setenv refresh_partuuids 'mmc dev ${mmcdev}; if test -z "${rootfs_a_partuuid}"; then part uuid mmc ${mmcdev}:2 rootfs_a_partuuid; fi; if test -z "${rootfs_b_partuuid}"; then part uuid mmc ${mmcdev}:3 rootfs_b_partuuid; fi'
 setenv select_slot 'if test -z "${active_slot}"; then setenv active_slot A; fi; if test "${active_slot}" = "B"; then setenv rootpart 3; setenv rootslot rootfsB; else setenv rootpart 2; setenv rootslot rootfsA; setenv active_slot A; fi'
-setenv mmcargs 'run select_slot; setenv rootdev /dev/mmcblk${mmcdev}p${rootpart}; setenv bootargs console=${console} root=${rootdev} rootwait rw'
+setenv resolve_rootdev 'run refresh_partuuids; if test "${active_slot}" = "B"; then setenv rootuuid ${rootfs_b_partuuid}; else setenv rootuuid ${rootfs_a_partuuid}; fi; if test -n "${rootuuid}"; then setenv rootdev PARTUUID=${rootuuid}; else setenv rootdev /dev/mmcblk${mmcdev}p${rootpart}; fi'
+setenv mmcargs 'run select_slot; run resolve_rootdev; setenv bootargs console=${console} root=${rootdev} rootwait rw'
 setenv rollback_slot 'if test "${active_slot}" = "B"; then setenv active_slot A; else setenv active_slot B; fi; setenv upgrade_available 0; setenv bootcount 0; saveenv'
 setenv mmcboot 'echo Booting from MMC slot ${active_slot}...; run mmcargs; fatload mmc ${mmcdev}:${mmcpart} ${loadaddr} zImage; fatload mmc ${mmcdev}:${mmcpart} ${fdt_addr_r} ${fdtfile}; bootz ${loadaddr} - ${fdt_addr_r}'
 
@@ -37,7 +39,7 @@ setenv netboot 'echo Booting from NFS...; setenv ethaddr 02:11:22:33:44:55; sete
 if test -z "${boot_mode}"; then setenv boot_mode mmc; fi
 if test -z "${bootmenu_default}"; then setenv bootmenu_default 0; fi
 
-setenv boot_tf 'setenv boot_mode mmc; setenv bootmenu_default 0; saveenv; if test -z "${active_slot}"; then setenv active_slot A; fi; if test "${active_slot}" = "B"; then setenv rootpart 3; else setenv rootpart 2; setenv active_slot A; fi; setenv bootargs console=ttymxc0,115200 root=/dev/mmcblk0p${rootpart} rootwait rw; echo Booting from MMC p${rootpart} slot ${active_slot}...; fatload mmc 0:1 0x80800000 zImage; fatload mmc 0:1 0x83000000 imx6ull-alientek-alpha.dtb; bootz 0x80800000 - 0x83000000'
+setenv boot_tf 'setenv boot_mode mmc; setenv bootmenu_default 0; saveenv; if test -z "${active_slot}"; then setenv active_slot A; fi; if test "${active_slot}" = "B"; then setenv rootpart 3; else setenv rootpart 2; setenv active_slot A; fi; mmc dev 0; if test -z "${rootfs_a_partuuid}"; then part uuid mmc 0:2 rootfs_a_partuuid; fi; if test -z "${rootfs_b_partuuid}"; then part uuid mmc 0:3 rootfs_b_partuuid; fi; if test "${active_slot}" = "B"; then setenv rootuuid ${rootfs_b_partuuid}; else setenv rootuuid ${rootfs_a_partuuid}; fi; if test -n "${rootuuid}"; then setenv rootdev PARTUUID=${rootuuid}; else setenv rootdev /dev/mmcblk0p${rootpart}; fi; setenv bootargs console=ttymxc0,115200 root=${rootdev} rootwait rw; echo Booting from MMC ${rootdev} slot ${active_slot}...; fatload mmc 0:1 0x80800000 zImage; fatload mmc 0:1 0x83000000 imx6ull-alientek-alpha.dtb; bootz 0x80800000 - 0x83000000'
 
 setenv boot_nfs 'setenv boot_mode nfs; setenv bootmenu_default 1; saveenv; setenv ethaddr 02:11:22:33:44:55; setenv eth1addr 02:11:22:33:44:56; setenv ethprime eth0; setenv ethact eth0; setenv bootargs console=ttymxc0,115200 root=/dev/nfs rw nfsroot=192.168.5.27:/srv/nfs/nfs_rootfs,nfsvers=3,tcp ip=192.168.5.201:192.168.5.27:192.168.5.1:255.255.255.0::eth0:off; echo bootargs=${bootargs}; if ping 192.168.5.27; then tftp 0x80800000 zImage; tftp 0x83000000 imx6ull-alientek-alpha.dtb; bootz 0x80800000 - 0x83000000; else echo ERROR: ping failed, check cable on ENET2/20b4000; fi'
 

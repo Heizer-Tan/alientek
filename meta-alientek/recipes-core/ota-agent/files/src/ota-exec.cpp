@@ -284,6 +284,9 @@ static int readCurrentSlot(char *currentSlot, size_t currentSlotSize)
 {
     const char *path = getenv("BOARD_CMDLINE_FILE");
     char cmdline[2048];
+    char uuidA[128];
+    char uuidB[128];
+    char token[160];
     FILE *file;
 
     if (currentSlot == NULL || currentSlotSize < 2U) {
@@ -310,6 +313,22 @@ static int readCurrentSlot(char *currentSlot, size_t currentSlotSize)
     if (hasCmdlineToken(cmdline, "root=/dev/mmcblk0p3") ||
         hasCmdlineToken(cmdline, "root=PARTLABEL=rootfsB")) {
         return snprintf(currentSlot, currentSlotSize, "B") == 1 ? 0 : -1;
+    }
+    if (readEnvironmentValue("rootfs_a_partuuid", uuidA, sizeof(uuidA),
+                              NULL, 0) == 0 &&
+        uuidA[0] != '\0') {
+        if (snprintf(token, sizeof(token), "root=PARTUUID=%s", uuidA) > 0 &&
+            hasCmdlineToken(cmdline, token)) {
+            return snprintf(currentSlot, currentSlotSize, "A") == 1 ? 0 : -1;
+        }
+    }
+    if (readEnvironmentValue("rootfs_b_partuuid", uuidB, sizeof(uuidB),
+                              NULL, 0) == 0 &&
+        uuidB[0] != '\0') {
+        if (snprintf(token, sizeof(token), "root=PARTUUID=%s", uuidB) > 0 &&
+            hasCmdlineToken(cmdline, token)) {
+            return snprintf(currentSlot, currentSlotSize, "B") == 1 ? 0 : -1;
+        }
     }
     errno = ENODEV;
     return -1;

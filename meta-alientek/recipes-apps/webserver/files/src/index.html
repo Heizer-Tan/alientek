@@ -52,9 +52,10 @@ th { background: #f3f3f3; }
 
 <section class="upgrade">
   <h2>固件升级</h2>
-  <p class="hint">上传 A/B 升级包（.swu）。成功后自动写入非活动槽并重启。局域网无口令，请仅在可信网络使用。</p>
+  <p class="hint">上传 A/B 升级包（.swu）。成功后自动写入非活动槽并重启。若板端配置了 WEBSERVER_UPGRADE_TOKEN，请填写升级口令；留空则不发送鉴权头。</p>
   <div class="controls">
     <label>升级包<input type="file" id="swuInput" accept=".swu,application/octet-stream"></label>
+    <label>升级口令（可选）<input type="password" id="tokenInput" autocomplete="off" placeholder="未配置则留空"></label>
     <button type="button" id="upgradeBtn">上传并升级</button>
   </div>
   <p id="upgradeMsg"></p>
@@ -70,6 +71,7 @@ th { background: #f3f3f3; }
   var canvas = document.getElementById("chart");
   var ctx = canvas.getContext("2d");
   var swuInput = document.getElementById("swuInput");
+  var tokenInput = document.getElementById("tokenInput");
   var upgradeBtn = document.getElementById("upgradeBtn");
   var upgradeMsg = document.getElementById("upgradeMsg");
 
@@ -208,10 +210,14 @@ th { background: #f3f3f3; }
       return;
     }
     var fd = new FormData();
+    var headers = {};
+    var token = (tokenInput.value || "").trim();
     fd.append("swu", file, file.name);
+    if (token)
+      headers["X-Upgrade-Token"] = token;
     upgradeBtn.disabled = true;
     setUpgradeMsg("正在上传并升级，请勿断电…", "");
-    fetch("/api/upgrade", { method: "POST", body: fd }).then(function (res) {
+    fetch("/api/upgrade", { method: "POST", headers: headers, body: fd }).then(function (res) {
       return res.json().then(function (body) {
         return { status: res.status, body: body };
       }).catch(function () {

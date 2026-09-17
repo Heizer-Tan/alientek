@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: MIT */
 /* mqtt-agent：MQTT 会话（探测/心跳/订命令），升级交给 ota-agent */
 
+#include "ota-defaults.hpp"
 #include "ota-mqtt.hpp"
 
 #include <arpa/inet.h>
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
@@ -41,95 +41,14 @@ static void onSignal(int signo)
     g_stopRequested = 1;
 }
 
-static const char *readPathSetting(const char *name, const char *defaultPath)
-{
-    const char *path = getenv(name);
-
-    if (path == NULL || path[0] == '\0') {
-        return defaultPath;
-    }
-    return path;
-}
-
-static char *trimInPlace(char *text)
-{
-    char *end;
-
-    while (*text != '\0' && isspace((unsigned char)*text)) {
-        ++text;
-    }
-    if (*text == '\0') {
-        return text;
-    }
-    end = text + strlen(text) - 1;
-    while (end > text && isspace((unsigned char)*end)) {
-        *end = '\0';
-        --end;
-    }
-    return text;
-}
-
-static int applyDefaultAssignment(char *line)
-{
-    char *equals;
-    char *key;
-    char *value;
-    const char *existing;
-
-    line = trimInPlace(line);
-    if (line[0] == '\0' || line[0] == '#') {
-        return 0;
-    }
-    if (strncmp(line, "export ", 7) == 0) {
-        line = trimInPlace(line + 7);
-    }
-    equals = strchr(line, '=');
-    if (equals == NULL || equals == line) {
-        return 0;
-    }
-    *equals = '\0';
-    key = trimInPlace(line);
-    value = trimInPlace(equals + 1);
-    if ((value[0] == '"' || value[0] == '\'') && strlen(value) >= 2U) {
-        char quote = value[0];
-        size_t length = strlen(value);
-
-        if (value[length - 1U] == quote) {
-            value[length - 1U] = '\0';
-            ++value;
-        }
-    }
-    if (key[0] == '\0') {
-        return 0;
-    }
-    existing = getenv(key);
-    if (existing != NULL && existing[0] != '\0') {
-        return 0;
-    }
-    return setenv(key, value, 0) == 0 ? 0 : -1;
-}
-
-static void loadConfigFile(const char *path)
-{
-    char line[512];
-    FILE *file = fopen(path, "r");
-
-    if (file == NULL) {
-        return;
-    }
-    while (fgets(line, sizeof(line), file) != NULL) {
-        (void)applyDefaultAssignment(line);
-    }
-    (void)fclose(file);
-}
-
 static void loadConfigs(void)
 {
-    loadConfigFile(readPathSetting(
+    otaLoadDefaultFile(otaReadPathSetting(
         "MQTT_AGENT_CONFIG_FILE", "/etc/default/mqtt-agent"));
-    loadConfigFile(readPathSetting(
+    otaLoadDefaultFile(otaReadPathSetting(
         "OTA_AGENT_CONFIG_FILE", "/etc/default/ota-agent"));
 }
+
 
 static int isAutoMqttHost(const char *host)
 {
@@ -153,7 +72,7 @@ static int parsePort(const char *text, int *portOut)
 
 static const char *brokerCachePath(void)
 {
-    return readPathSetting(
+    return otaReadPathSetting(
         "OTA_MQTT_BROKER_CACHE", "/var/lib/mqtt-agent/mqtt-broker.host");
 }
 
@@ -246,7 +165,7 @@ static int probeTcpPort(const char *ip, int port, int timeoutMs)
 
 static int readIfaceIpv4(uint32_t *addrOut, uint32_t *maskOut)
 {
-    const char *iface = readPathSetting("OTA_MQTT_DISCOVER_IFACE", "eth0");
+    const char *iface = otaReadPathSetting("OTA_MQTT_DISCOVER_IFACE", "eth0");
     struct ifaddrs *list = NULL;
     struct ifaddrs *cursor;
     int found = 0;
@@ -458,30 +377,30 @@ static void maybeHeartbeat(void)
 
 static int loadRuntimeSettings(void)
 {
-    const char *host = readPathSetting("OTA_MQTT_HOST", "auto");
+    const char *host = otaReadPathSetting("OTA_MQTT_HOST", "auto");
     long heartbeat;
 
-    if (parsePort(readPathSetting("OTA_MQTT_PORT", "1883"), &g_mqttPort) !=
+    if (parsePort(otaReadPathSetting("OTA_MQTT_PORT", "1883"), &g_mqttPort) !=
         0) {
         return -1;
     }
     (void)snprintf(g_mqttClientId, sizeof(g_mqttClientId), "%s",
-                   readPathSetting("OTA_MQTT_CLIENT_ID", "ota-agent"));
+                   otaReadPathSetting("OTA_MQTT_CLIENT_ID", "ota-agent"));
     (void)snprintf(g_commandTopic, sizeof(g_commandTopic), "%s",
-                   readPathSetting("OTA_MQTT_COMMAND_TOPIC",
+                   otaReadPathSetting("OTA_MQTT_COMMAND_TOPIC",
                                    "device/ota/command"));
     (void)snprintf(g_statusTopic, sizeof(g_statusTopic), "%s",
-                   readPathSetting("OTA_MQTT_STATUS_TOPIC",
+                   otaReadPathSetting("OTA_MQTT_STATUS_TOPIC",
                                    "device/ota/status"));
     (void)snprintf(g_heartbeatTopic, sizeof(g_heartbeatTopic), "%s",
-                   readPathSetting("OTA_MQTT_HEARTBEAT_TOPIC",
+                   otaReadPathSetting("OTA_MQTT_HEARTBEAT_TOPIC",
                                    "device/heartbeat"));
     (void)snprintf(g_otaBin, sizeof(g_otaBin), "%s",
-                   readPathSetting("OTA_AGENT_BIN", "/usr/bin/ota-agent"));
+                   otaReadPathSetting("OTA_AGENT_BIN", "/usr/bin/ota-agent"));
     (void)snprintf(g_downloadPath, sizeof(g_downloadPath), "%s",
-                   readPathSetting("OTA_DOWNLOAD_PATH",
+                   otaReadPathSetting("OTA_DOWNLOAD_PATH",
                                    "/var/tmp/ota-download.swu"));
-    heartbeat = strtol(readPathSetting("OTA_MQTT_HEARTBEAT_SEC", "30"), NULL,
+    heartbeat = strtol(otaReadPathSetting("OTA_MQTT_HEARTBEAT_SEC", "30"), NULL,
                        10);
     g_heartbeatSec = heartbeat < 0 ? 0 : (int)heartbeat;
     g_mqttAutoMode = isAutoMqttHost(host) ? 1 : 0;

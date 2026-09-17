@@ -19,17 +19,52 @@
 #define AP3216C_DEV_PATH "/dev/ap3216c"
 #define AP3216C_DB_PATH  "/var/lib/ap3216c/ap3216c.db"
 #define AP3216C_DB_DIR   "/var/lib/ap3216c"
-#define SAMPLE_INTERVAL_SEC 300
-#define RETAIN_SECONDS (7 * 86400)
+#define DEFAULT_SAMPLE_INTERVAL_SEC 300
+#define DEFAULT_RETAIN_SECONDS (7 * 86400)
 #define AP3216C_BUF_SIZE 128
 
 #ifndef AP3216C_LOGGER_TEST_PARSE
 static volatile sig_atomic_t gStopRequested = 0;
+static int gSampleIntervalSec = DEFAULT_SAMPLE_INTERVAL_SEC;
+static int gRetainSeconds = DEFAULT_RETAIN_SECONDS;
+static const char *gDbPath = AP3216C_DB_PATH;
+static const char *gDbDir = AP3216C_DB_DIR;
+static const char *gDevPath = AP3216C_DEV_PATH;
 
 static void handleSignal(int sig)
 {
 	(void)sig;
 	gStopRequested = 1;
+}
+
+/* 从环境变量加载可调参数（由 /etc/default/ap3216c-logger 注入） */
+static void loadRuntimeConfig(void)
+{
+	const char *v;
+	char *end;
+	long n;
+
+	v = getenv("AP3216C_SAMPLE_INTERVAL_SEC");
+	if (v && *v) {
+		n = strtol(v, &end, 10);
+		if (end != v && *end == '\0' && n > 0 && n < 86400)
+			gSampleIntervalSec = (int)n;
+	}
+	v = getenv("AP3216C_RETAIN_SECONDS");
+	if (v && *v) {
+		n = strtol(v, &end, 10);
+		if (end != v && *end == '\0' && n > 0)
+			gRetainSeconds = (int)n;
+	}
+	v = getenv("AP3216C_DB_PATH");
+	if (v && *v)
+		gDbPath = v;
+	v = getenv("AP3216C_DB_DIR");
+	if (v && *v)
+		gDbDir = v;
+	v = getenv("AP3216C_DEV_PATH");
+	if (v && *v)
+		gDevPath = v;
 }
 #endif
 
@@ -52,11 +87,11 @@ static int parseSample(const char *line, unsigned *ir, unsigned *als, unsigned *
 /* 确保数据库目录存在；0 成功，非 0 失败 */
 static int ensureDbDir(void)
 {
-	if (mkdir(AP3216C_DB_DIR, 0755) == 0)
+	if (mkdir(gDbDir, 0755) == 0)
 		return 0;
 	if (errno == EEXIST)
 		return 0;
-	syslog(LOG_ERR, "mkdir %s: %s", AP3216C_DB_DIR, strerror(errno));
+	syslog(LOG_ERR, "mkdir %s: %s", gDbDir, strerror(errno));
 	return -1;
 }
 
@@ -77,7 +112,7 @@ static int openDb(sqlite3 **db)
 
 	if (!db)
 		return -1;
-	rc = sqlite3_open(AP3216C_DB_PATH, db);
+	rc = sqlite3_open(gDbPath, db);
 	if (rc != SQLITE_OK) {
 		syslog(LOG_ERR, "sqlite3_open: %s", sqlite3_errmsg(*db));
 		sqlite3_close(*db);
@@ -102,14 +137,14 @@ static int readDeviceSample(unsigned *ir, unsigned *als, unsigned *ps)
 	ssize_t n;
 	int fd;
 
-	fd = open(AP3216C_DEV_PATH, O_RDONLY);
+	fd = open(gDevPath, O_RDONLY);
 	if (fd < 0) {
-		syslog(LOG_ERR, "open %s: %s", AP3216C_DEV_PATH, strerror(errno));
+		syslog(LOG_ERR, "open %s: %s", gDevPath, strerror(errno));
 		return -1;
 	}
 	n = read(fd, buf, sizeof(buf) - 1);
 	if (n < 0) {
-		syslog(LOG_ERR, "read %s: %s", AP3216C_DEV_PATH, strerror(errno));
+		syslog(LOG_ERR, "read %s: %s", gDevPath, strerror(errno));
 		close(fd);
 		return -1;
 	}
@@ -152,7 +187,7 @@ static int insertSample(sqlite3 *db, time_t ts, unsigned ir, unsigned als, unsig
 static int purgeOldSamples(sqlite3 *db, time_t now)
 {
 	sqlite3_stmt *stmt = NULL;
-	time_t cutoff = now - RETAIN_SECONDS;
+	time_t cutoff = now - gRetainSeconds;
 	int rc;
 
 	rc = sqlite3_prepare_v2(db, "DELETE FROM samples WHERE ts < ?;", -1, &stmt, NULL);
@@ -212,6 +247,7 @@ int main(void)
 	struct sigaction sa;
 
 	openlog("ap3216c-logger", LOG_PID, LOG_DAEMON);
+	loadRuntimeConfig();
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_handler = handleSignal;
 	sigaction(SIGINT, &sa, NULL);
@@ -226,13 +262,13 @@ int main(void)
 		return 1;
 	}
 	syslog(LOG_INFO, "started interval=%ds retain=%ds",
-	       SAMPLE_INTERVAL_SEC, RETAIN_SECONDS);
+	       gSampleIntervalSec, gRetainSeconds);
 
 	while (!gStopRequested) {
 		sampleOnce(db);
 		if (gStopRequested)
 			break;
-		sleep(SAMPLE_INTERVAL_SEC);
+		sleep((unsigned int)gSampleIntervalSec);
 	}
 
 	sqlite3_close(db);

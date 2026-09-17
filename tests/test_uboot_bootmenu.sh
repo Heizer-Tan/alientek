@@ -6,6 +6,7 @@ defconfig="${repo_root}/meta-alientek/recipes-bsp/u-boot/u-boot/mx6ull_aes_defco
 bootcmd="${repo_root}/meta-alientek/recipes-bsp/u-boot/u-boot/boot.cmd"
 
 grep -Fqx 'CONFIG_CMD_BOOTMENU=y' "${defconfig}"
+grep -Fqx 'CONFIG_CMD_PART=y' "${defconfig}"
 grep -Fqx 'CONFIG_ENV_SIZE=0x4000' "${defconfig}"
 
 grep -q 'bootmenu_delay 5\|bootmenu_delay=5' "${bootcmd}"
@@ -46,5 +47,7 @@ grep -q 'ping 192.168.5.27' "${bootcmd}"
 grep -q "setenv boot_nfs 'setenv boot_mode nfs; setenv bootmenu_default 1; saveenv;" "${bootcmd}"
 grep -q "setenv boot_tf 'setenv boot_mode mmc; setenv bootmenu_default 0; saveenv;" "${bootcmd}"
 grep -q 'bootz 0x80800000 - 0x83000000' "${bootcmd}"
+grep -q 'resolve_rootdev\|PARTUUID' "${bootcmd}"
+grep -q 'part uuid mmc' "${bootcmd}"
 
 echo "uboot bootmenu script constraints ok"

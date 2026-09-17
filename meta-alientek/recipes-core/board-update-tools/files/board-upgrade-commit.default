@@ -1,0 +1,6 @@
+# board-upgrade-commit 默认配置
+# 1=提交前跑健康检查；0=保持旧行为（进用户态即提交）
+BOARD_UPGRADE_HEALTH_ENABLE=1
+BOARD_UPGRADE_HEALTH_CMD=/usr/sbin/board-upgrade-healthcheck
+# 健康检查失败时切回 last_good_slot 并 reboot
+BOARD_UPGRADE_ROLLBACK_ON_FAIL=1

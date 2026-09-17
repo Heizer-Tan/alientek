@@ -491,7 +491,8 @@
 	/* xnur-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>; */
 	measure-delay-time = <0xffff>;
 	pre-charge-time = <0xfff>;
-	status = "okay";
+	/* 与 GT9147 共用 GPIO1_IO09（TSC_INT），电容触摸启用时关闭电阻屏控制器 */
+	status = "disabled";
 };
 
 &uart1 {

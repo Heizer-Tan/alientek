@@ -9,6 +9,7 @@ SRC_URI = " \
     file://src/ap3216c-logger.c \
     file://src/Makefile \
     file://ap3216c-logger.init \
+    file://ap3216c-logger.default \
 "
 S = "${WORKDIR}/src"
 
@@ -25,7 +26,9 @@ do_install() {
     install -m 0755 ${S}/ap3216c-logger ${D}${bindir}/ap3216c-logger
     install -d ${D}${sysconfdir}/init.d
     install -m 0755 ${WORKDIR}/ap3216c-logger.init ${D}${sysconfdir}/init.d/ap3216c-logger
+    install -d ${D}${sysconfdir}/default
+    install -m 0644 ${WORKDIR}/ap3216c-logger.default ${D}${sysconfdir}/default/ap3216c-logger
     install -d ${D}/var/lib/ap3216c
 }
 
-FILES:${PN} += "${sysconfdir}/init.d/ap3216c-logger /var/lib/ap3216c"
+FILES:${PN} += "${sysconfdir}/init.d/ap3216c-logger ${sysconfdir}/default/ap3216c-logger /var/lib/ap3216c"

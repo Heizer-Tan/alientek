@@ -1,3 +1,4 @@
-# 由内核 ip= 参数带起 eth1，用户态不再重复配置
+# 本地 MMC：eth0 由 board-network 配置；NFS：eth0 由内核 ip= 参数带起
+# 用户态此处仅保留 lo，避免与上述路径重复配置
 auto lo
 iface lo inet loopback

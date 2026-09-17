@@ -9,30 +9,11 @@ inherit qemu
 IMAGE_FEATURES += "ssh-server-openssh"
 
 CORE_IMAGE_EXTRA_INSTALL += " \
-    curl \
-    ethtool \
-    iproute2 \
-    iputils \
-    i2c-tools \
-    libubootenv \
-    libubootenv-bin \
-    key-monitor \
-    ap3216c-read \
-    ap3216c-module \
-    ap3216c-logger \
-    board-network \
-    webserver \
-    board-update-tools \
-    ota-agent \
-    mqtt-agent \
-    swupdate \
-    sqlite3 \
-    board-ntpdate \
-    busybox-hwclock \
-    openssh-keygen \
+    packagegroup-alientek-core \
+    packagegroup-alientek-demo \
 "
 
-# NFS root 场景下 eth1 由内核 ip= 参数配置，用户态网络文件仅保留 lo
+# NFS root 场景下 eth0 由内核 ip= 参数配置，用户态网络文件仅保留 lo
 # 构建时用 qemu+目标机 ssh-keygen 预生成 host key，避免板端首次启动缺熵卡死
 # （openssh 无 -native；kas 容器也不一定有宿主机 ssh-keygen）
 

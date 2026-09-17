@@ -15,8 +15,8 @@ else
 MQTT_CPPFLAGS := -DOTA_MQTT_BACKEND_STUB
 endif
 
-SOURCES = ota-agent.cpp ota-state.cpp ota-download.cpp ota-exec.cpp ota-mqtt.cpp
-HEADERS = ota-agent.hpp ota-state.hpp ota-download.hpp ota-exec.hpp ota-mqtt.hpp
+SOURCES = ota-agent.cpp ota-state.cpp ota-download.cpp ota-exec.cpp ota-mqtt.cpp ota-defaults.cpp
+HEADERS = ota-agent.hpp ota-state.hpp ota-download.hpp ota-exec.hpp ota-mqtt.hpp ota-defaults.hpp
 
 ota-agent: $(SOURCES) $(HEADERS)
 	$(CXX) $(CXXFLAGS) $(MQTT_CPPFLAGS) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)

@@ -4,7 +4,7 @@ header:
 machine: imx6ull-alientek-alpha
 distro: poky
 target:
-  - alientek-image-base
+  - alientek-image-update
 
 repos:
   poky:

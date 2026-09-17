@@ -2,57 +2,9 @@
 
 set -eu
 
-CMDLINE_FILE="${BOARD_CMDLINE_FILE:-/proc/cmdline}"
-
-readActiveSlot() {
-    /usr/bin/fw_printenv -n active_slot 2>/dev/null || printf '%s\n' "A"
-}
-
-readUpgradeAvailable() {
-    /usr/bin/fw_printenv -n upgrade_available 2>/dev/null || printf '%s\n' "0"
-}
-
-readCurrentSlot() {
-    if grep -Eq '(^| )root=/dev/mmcblk0p2( |$)' "${CMDLINE_FILE}"; then
-        printf '%s\n' "A"
-        return 0
-    fi
-
-    if grep -Eq '(^| )root=/dev/mmcblk0p3( |$)' "${CMDLINE_FILE}"; then
-        printf '%s\n' "B"
-        return 0
-    fi
-
-    if grep -Eq '(^| )root=/dev/nfs( |$)' "${CMDLINE_FILE}"; then
-        printf '%s\n' "NFS"
-        return 0
-    fi
-
-    printf '%s\n' "UNKNOWN"
-}
-
-selectTargetSlot() {
-    activeSlot="$(readActiveSlot)"
-    case "${activeSlot}" in
-        A) printf '%s\n' "B" ;;
-        B) printf '%s\n' "A" ;;
-        *)
-            printf '%s\n' "B"
-            ;;
-    esac
-}
-
-selectSwuMode() {
-    targetSlot="$(selectTargetSlot)"
-    case "${targetSlot}" in
-        A) printf '%s\n' "stable,slotA" ;;
-        B) printf '%s\n' "stable,slotB" ;;
-        *)
-            printf '未知目标槽位=%s，默认写入 slotB\n' "${targetSlot}" >&2
-            printf '%s\n' "stable,slotB"
-            ;;
-    esac
-}
+LIB="${BOARD_SLOT_LIB:-/usr/share/board-update-tools/board-slot-lib.sh}"
+# shellcheck disable=SC1090
+. "${LIB}"
 
 requireFile() {
     swuPath="$1"
@@ -60,34 +12,6 @@ requireFile() {
         printf '升级包不存在: %s\n' "${swuPath}" >&2
         exit 1
     fi
-}
-
-requireSafeUpgradeState() {
-    upgradeAvailable="$(readUpgradeAvailable)"
-    activeSlot="$(readActiveSlot)"
-    currentSlot="$(readCurrentSlot)"
-
-    if [ "${upgradeAvailable}" = "1" ]; then
-        printf '检测到上次升级尚未完成提交，请先重启并确认新槽位启动成功后再继续升级\n' >&2
-        exit 1
-    fi
-
-    case "${currentSlot}" in
-        A|B)
-            if [ "${currentSlot}" != "${activeSlot}" ]; then
-                printf '当前实际启动槽位=%s，但环境 active_slot=%s；这通常表示升级后尚未重启，已拒绝继续升级\n' \
-                    "${currentSlot}" "${activeSlot}" >&2
-                exit 1
-            fi
-            ;;
-        NFS)
-            printf '当前系统运行在 NFS 根文件系统上，继续按 active_slot=%s 选择目标槽位\n' "${activeSlot}"
-            ;;
-        *)
-            printf '无法从 %s 判断当前启动槽位，已拒绝继续升级\n' "${CMDLINE_FILE}" >&2
-            exit 1
-            ;;
-    esac
 }
 
 parseArgs() {
@@ -125,11 +49,13 @@ performRebootIfRequested() {
 main() {
     parseArgs "$@"
     requireFile "${swuPath}"
-    requireSafeUpgradeState
-    targetSlot="$(selectTargetSlot)"
-    mode="$(selectSwuMode)"
+    if ! board_require_safe_upgrade_state; then
+        exit 1
+    fi
+    targetSlot="$(board_select_target_slot)"
+    mode="$(board_select_swu_mode)"
     printf '当前槽位: %s，目标槽位: %s，执行模式: %s\n' \
-        "$(readActiveSlot)" "${targetSlot}" "${mode}" >&2
+        "$(board_read_active_slot)" "${targetSlot}" "${mode}" >&2
     set +e
     /usr/bin/swupdate -v -i "${swuPath}" -e "${mode}"
     swupdateStatus="$?"

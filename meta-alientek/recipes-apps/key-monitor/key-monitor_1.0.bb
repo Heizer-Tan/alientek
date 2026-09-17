@@ -3,18 +3,26 @@ DESCRIPTION = "前台或 SysV 可选服务；默认不开机自启"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://key-monitor.c;beginline=1;endline=1;md5=234d7d4edd08962c0144e4604050e0b6"
 
+FILESEXTRAPATHS:prepend := "${THISDIR}/../common:"
+
 # file://src/... 解压到 ${WORKDIR}/src/，避免 S=WORKDIR 触发 pseudo path mismatch
 SRC_URI = " \
     file://src/key-monitor.c \
     file://src/Makefile \
+    file://input-device.c \
+    file://input-device.h \
     file://key-monitor.init \
 "
 
 S = "${WORKDIR}/src"
 
+do_configure() {
+    cp -f "${WORKDIR}/input-device.c" "${WORKDIR}/input-device.h" "${S}/"
+}
+
 # 不用 oe_runmake install：make -j 的 /tmp/GMfifo* 会在 kas-container 里触发 Pseudo abort
 do_compile() {
-    ${CC} ${CFLAGS} ${LDFLAGS} -o key-monitor key-monitor.c
+    ${CC} ${CFLAGS} ${LDFLAGS} -o key-monitor key-monitor.c input-device.c
 }
 
 do_install() {

@@ -1,11 +1,11 @@
 TARGET = webserver
-SRCS = webserver.c
+SRCS = webserver.c webserver-http.c webserver-samples.c webserver-upgrade.c
 CFLAGS ?= -Wall -O2
 LDFLAGS ?=
 LDLIBS = -lsqlite3
 
 all: $(TARGET)
-$(TARGET): $(SRCS)
+$(TARGET): $(SRCS) webserver.h
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SRCS) $(LDLIBS)
 
 clean:

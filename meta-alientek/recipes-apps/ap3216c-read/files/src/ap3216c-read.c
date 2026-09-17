@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -10,6 +11,14 @@
 #define AP3216C_DEV_PATH "/dev/ap3216c"
 #define AP3216C_BUF_SIZE 128
 #define AP3216C_LOOP_DELAY_US 500000U
+
+static volatile sig_atomic_t gStopRequested = 0;
+
+static void handleSignal(int sig)
+{
+	(void)sig;
+	gStopRequested = 1;
+}
 
 static void printUsage(const char *progName)
 {
@@ -35,6 +44,7 @@ int main(int argc, char *argv[])
 {
 	int loopMode = 0;
 	int fd;
+	struct sigaction sa;
 
 	if (argc > 2) {
 		printUsage(argv[0]);
@@ -48,6 +58,11 @@ int main(int argc, char *argv[])
 		loopMode = 1;
 	}
 
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = handleSignal;
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+
 	fd = open(AP3216C_DEV_PATH, O_RDONLY);
 	if (fd < 0) {
 		fprintf(stderr, "ap3216c-read: open %s: %s\n", AP3216C_DEV_PATH,
@@ -56,18 +71,21 @@ int main(int argc, char *argv[])
 	}
 
 	if (loopMode != 0) {
-		while (1) {
+		while (!gStopRequested) {
 			if (readOnce(fd) != 0) {
 				close(fd);
 				return 1;
 			}
 			usleep(AP3216C_LOOP_DELAY_US);
 			if (lseek(fd, 0, SEEK_SET) < 0) {
-				fprintf(stderr, "ap3216c-read: lseek: %s\n", strerror(errno));
+				fprintf(stderr, "ap3216c-read: lseek: %s\n",
+					strerror(errno));
 				close(fd);
 				return 1;
 			}
 		}
+		close(fd);
+		return 0;
 	}
 
 	if (readOnce(fd) != 0) {

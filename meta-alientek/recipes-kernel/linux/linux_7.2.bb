@@ -24,11 +24,13 @@ KERNEL_EXTRA_ARGS += "LOADADDR=${UBOOT_ENTRYPOINT}"
 
 # 层内路径：改这些文件只失效 do_configure（及后续），不碰 unpack
 ALIENTK_NFS_CFG = "${THISDIR}/${PN}/nfs.cfg"
+ALIENTK_TOUCH_CFG = "${THISDIR}/${PN}/touch.cfg"
 ALIENTK_DTS = "${THISDIR}/../../recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dts"
 ALIENTK_DTSI = "${THISDIR}/../../recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dtsi"
 
 do_configure[file-checksums] += "\
     ${ALIENTK_NFS_CFG}:True \
+    ${ALIENTK_TOUCH_CFG}:True \
     ${ALIENTK_DTS}:True \
     ${ALIENTK_DTSI}:True \
 "
@@ -59,5 +61,8 @@ do_configure:prepend() {
 do_configure:append() {
     if [ -f ${ALIENTK_NFS_CFG} ]; then
         ${S}/scripts/kconfig/merge_config.sh -m -O ${B} ${B}/.config ${ALIENTK_NFS_CFG}
+    fi
+    if [ -f ${ALIENTK_TOUCH_CFG} ]; then
+        ${S}/scripts/kconfig/merge_config.sh -m -O ${B} ${B}/.config ${ALIENTK_TOUCH_CFG}
     fi
 }

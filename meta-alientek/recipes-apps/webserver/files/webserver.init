@@ -8,11 +8,12 @@
 # Short-Description: Board sensor history web UI on :8080
 ### END INIT INFO
 
-# webserver SysV 脚本：默认开机自启
+# webserver SysV 脚本：默认开机自启；加载 /etc/default/webserver
 
 NAME=webserver
 DAEMON=/usr/bin/webserver
 PIDFILE=/var/run/webserver.pid
+DEFAULTS=/etc/default/webserver
 
 [ -x "$DAEMON" ] || exit 0
 
@@ -21,9 +22,11 @@ do_start() {
 		echo "$NAME already running"
 		return 0
 	fi
+	# 在子 shell 中 source 配置并 exec，确保环境变量传入守护进程
 	start-stop-daemon --start --quiet --background \
 		--make-pidfile --pidfile "$PIDFILE" \
-		--exec "$DAEMON"
+		--startas /bin/sh -- -c \
+		"set -a; [ -r \"$DEFAULTS\" ] && . \"$DEFAULTS\"; set +a; exec \"$DAEMON\""
 	echo "Started $NAME"
 }
 

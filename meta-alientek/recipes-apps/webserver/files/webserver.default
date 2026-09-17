@@ -1,0 +1,16 @@
+# webserver 运行时配置（由 init 脚本 source 后导出给守护进程）
+#
+# WEBSERVER_UPGRADE_TOKEN=
+#   空或未设置：POST /api/upgrade 开放（实验室默认）
+#   非空：须匹配请求头 X-Upgrade-Token 或 Authorization: Bearer <token>
+#
+# WEBSERVER_PORT=8080
+# WEBSERVER_DB_PATH=/var/lib/ap3216c/ap3216c.db
+# WEBSERVER_INDEX=/usr/share/webserver/index.html
+# WEBSERVER_APPLY=/usr/sbin/board-apply-update
+# WEBSERVER_SWU_PATH=/var/tmp/web-upgrade.swu
+# WEBSERVER_MIME_PATH=/var/tmp/web-upgrade.mime
+# WEBSERVER_LOG_PATH=/var/tmp/web-upgrade.log
+# WEBSERVER_REBOOT_CMD=reboot
+
+WEBSERVER_UPGRADE_TOKEN=

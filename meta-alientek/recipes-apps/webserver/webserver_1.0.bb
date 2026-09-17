@@ -7,9 +7,14 @@ RDEPENDS:${PN} = "sqlite3 libsqlite3 board-update-tools"
 
 SRC_URI = " \
     file://src/webserver.c \
+    file://src/webserver.h \
+    file://src/webserver-http.c \
+    file://src/webserver-samples.c \
+    file://src/webserver-upgrade.c \
     file://src/index.html \
     file://src/Makefile \
     file://webserver.init \
+    file://webserver.default \
 "
 S = "${WORKDIR}/src"
 
@@ -18,7 +23,9 @@ INITSCRIPT_NAME = "webserver"
 INITSCRIPT_PARAMS = "defaults"
 
 do_compile() {
-    ${CC} ${CFLAGS} ${LDFLAGS} -o webserver webserver.c -lsqlite3
+    ${CC} ${CFLAGS} ${LDFLAGS} -o webserver \
+        webserver.c webserver-http.c webserver-samples.c webserver-upgrade.c \
+        -lsqlite3
 }
 
 do_install() {
@@ -28,6 +35,8 @@ do_install() {
     install -m 0644 ${S}/index.html ${D}${datadir}/webserver/index.html
     install -d ${D}${sysconfdir}/init.d
     install -m 0755 ${WORKDIR}/webserver.init ${D}${sysconfdir}/init.d/webserver
+    install -d ${D}${sysconfdir}/default
+    install -m 0644 ${WORKDIR}/webserver.default ${D}${sysconfdir}/default/webserver
 }
 
-FILES:${PN} += "${datadir}/webserver ${sysconfdir}/init.d/webserver"
+FILES:${PN} += "${datadir}/webserver ${sysconfdir}/init.d/webserver ${sysconfdir}/default/webserver"

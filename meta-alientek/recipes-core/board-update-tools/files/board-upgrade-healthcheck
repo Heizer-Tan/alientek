@@ -1,0 +1,59 @@
+#!/bin/sh
+# 升级首启健康探针：关键业务进程存在则检查 pid；均不存在则跳过（演示精简镜像）
+
+set -eu
+
+logMsg() {
+    logger -t board-upgrade-healthcheck "$1" 2>/dev/null || true
+    printf '%s\n' "$1" >&2
+}
+
+checkPidOf() {
+    name="$1"
+    if ! command -v pidof >/dev/null 2>&1; then
+        return 0
+    fi
+    if pidof "${name}" >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+# 二进制不在镜像中则跳过该项
+needBinary() {
+    bin="$1"
+    [ -x "${bin}" ] || [ -x "/usr/bin/$(basename "${bin}")" ] || [ -x "/usr/sbin/$(basename "${bin}")" ]
+}
+
+failed=0
+checked=0
+
+if needBinary /usr/bin/webserver; then
+    checked=1
+    if checkPidOf webserver; then
+        logMsg "webserver: ok"
+    else
+        logMsg "webserver: 未运行"
+        failed=1
+    fi
+fi
+
+if needBinary /usr/bin/mqtt-agent; then
+    checked=1
+    if checkPidOf mqtt-agent; then
+        logMsg "mqtt-agent: ok"
+    else
+        logMsg "mqtt-agent: 未运行"
+        failed=1
+    fi
+fi
+
+if [ "${checked}" -eq 0 ]; then
+    logMsg "无可检查业务进程，视为通过"
+    exit 0
+fi
+
+if [ "${failed}" -ne 0 ]; then
+    exit 1
+fi
+exit 0
