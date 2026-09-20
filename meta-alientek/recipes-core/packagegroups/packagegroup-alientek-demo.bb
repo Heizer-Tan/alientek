@@ -11,4 +11,5 @@ RDEPENDS:${PN} = " \
     touch-monitor \
     ap3216c-read \
     icm20608-read \
+    sensor-dashboard \
 "

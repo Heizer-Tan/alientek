@@ -1,0 +1,82 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          sensor-dashboard
+# Required-Start:    $local_fs
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: LVGL sensor dashboard on LCD
+### END INIT INFO
+
+NAME=sensor-dashboard
+DAEMON=/usr/bin/sensor-dashboard
+PIDFILE=/var/run/sensor-dashboard.pid
+DEFAULTS=/etc/default/sensor-dashboard
+
+[ -x "$DAEMON" ] || exit 0
+
+loadDefaults() {
+	if [ -f "$DEFAULTS" ]; then
+		set -a
+		# shellcheck disable=SC1090
+		. "$DEFAULTS"
+		set +a
+	fi
+}
+
+do_start() {
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "$NAME already running"
+		return 0
+	fi
+	loadDefaults
+	# 解绑帧缓冲控制台，避免 shell/登录提示叠在 GUI 上
+	for bind in /sys/class/vtconsole/vtcon*/bind; do
+		[ -w "$bind" ] || continue
+		name="$(dirname "$bind")/name"
+		if [ -r "$name" ] && grep -qi frame "$name" 2>/dev/null; then
+			echo 0 > "$bind" 2>/dev/null || true
+		fi
+	done
+	# 切到图形模式并清屏（忽略失败）
+	if [ -c /dev/tty0 ]; then
+		printf '\033[2J\033[H\033[?25l' > /dev/tty0 2>/dev/null || true
+	fi
+	start-stop-daemon --start --quiet --background \
+		--make-pidfile --pidfile "$PIDFILE" \
+		--exec "$DAEMON"
+	echo "Started $NAME"
+}
+
+do_stop() {
+	start-stop-daemon --stop --quiet --pidfile "$PIDFILE" --retry 5
+	rm -f "$PIDFILE"
+	echo "Stopped $NAME"
+}
+
+case "$1" in
+start)
+	do_start
+	;;
+stop)
+	do_stop
+	;;
+restart)
+	do_stop
+	do_start
+	;;
+status)
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "$NAME is running"
+		exit 0
+	fi
+	echo "$NAME is not running"
+	exit 3
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart|status}"
+	exit 1
+	;;
+esac
+
+exit 0

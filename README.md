@@ -254,6 +254,16 @@ icm20608-read -w
 
 静止时 `az_g` 约 ±1g，角速度接近 0。历史数据见下方 Web「六轴」页。
 
+## LCD 传感器仪表盘
+
+镜像含 `sensor-dashboard`（LVGL + `/dev/fb0` + Goodix 触摸），开机自启：
+
+- 主页两张卡片：光感 AP3216C / 六轴 ICM20608
+- 触摸进入详情，点「返回」回主页
+- 手动：`/etc/init.d/sensor-dashboard start|stop`
+
+需确认 `ls -l /dev/fb0`，触摸为 Goodix event 节点。
+
 ## 传感器入库与 Web 查询
 
 - 光感采集：`ap3216c-logger` 每 5 分钟写入 `/var/lib/ap3216c/ap3216c.db`，保留 7 天
