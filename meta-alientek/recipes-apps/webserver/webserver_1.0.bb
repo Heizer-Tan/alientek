@@ -10,8 +10,10 @@ SRC_URI = " \
     file://src/webserver.h \
     file://src/webserver-http.c \
     file://src/webserver-samples.c \
+    file://src/webserver-icm.c \
     file://src/webserver-upgrade.c \
     file://src/index.html \
+    file://src/icm20608.html \
     file://src/Makefile \
     file://webserver.init \
     file://webserver.default \
@@ -24,7 +26,8 @@ INITSCRIPT_PARAMS = "defaults"
 
 do_compile() {
     ${CC} ${CFLAGS} ${LDFLAGS} -o webserver \
-        webserver.c webserver-http.c webserver-samples.c webserver-upgrade.c \
+        webserver.c webserver-http.c webserver-samples.c webserver-icm.c \
+        webserver-upgrade.c \
         -lsqlite3
 }
 
@@ -33,6 +36,7 @@ do_install() {
     install -m 0755 ${S}/webserver ${D}${bindir}/webserver
     install -d ${D}${datadir}/webserver
     install -m 0644 ${S}/index.html ${D}${datadir}/webserver/index.html
+    install -m 0644 ${S}/icm20608.html ${D}${datadir}/webserver/icm20608.html
     install -d ${D}${sysconfdir}/init.d
     install -m 0755 ${WORKDIR}/webserver.init ${D}${sysconfdir}/init.d/webserver
     install -d ${D}${sysconfdir}/default

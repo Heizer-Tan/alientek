@@ -7,6 +7,8 @@
 # WEBSERVER_PORT=8080
 # WEBSERVER_DB_PATH=/var/lib/ap3216c/ap3216c.db
 # WEBSERVER_INDEX=/usr/share/webserver/index.html
+# WEBSERVER_ICM_DB_PATH=/var/lib/icm20608/icm20608.db
+# WEBSERVER_ICM_INDEX=/usr/share/webserver/icm20608.html
 # WEBSERVER_APPLY=/usr/sbin/board-apply-update
 # WEBSERVER_SWU_PATH=/var/tmp/web-upgrade.swu
 # WEBSERVER_MIME_PATH=/var/tmp/web-upgrade.mime

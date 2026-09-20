@@ -44,6 +44,10 @@ void webserverCfgInit(void)
 				   WEBSERVER_DEFAULT_DB_PATH);
 	gCfg.indexPath = envOrDefault("WEBSERVER_INDEX",
 				     WEBSERVER_DEFAULT_INDEX);
+	gCfg.icmDbPath = envOrDefault("WEBSERVER_ICM_DB_PATH",
+				     WEBSERVER_DEFAULT_ICM_DB_PATH);
+	gCfg.icmIndexPath = envOrDefault("WEBSERVER_ICM_INDEX",
+					WEBSERVER_DEFAULT_ICM_INDEX);
 	gCfg.applyPath = envOrDefault("WEBSERVER_APPLY",
 				     WEBSERVER_DEFAULT_APPLY);
 	gCfg.swuPath = envOrDefault("WEBSERVER_SWU_PATH",
@@ -119,6 +123,14 @@ static void handleClient(int clientFd)
 	}
 	if (strcmp(path, "/api/samples") == 0) {
 		handleSamplesRequest(clientFd, query);
+		return;
+	}
+	if (strcmp(path, "/icm20608") == 0) {
+		handleIcmPageRequest(clientFd);
+		return;
+	}
+	if (strcmp(path, "/api/icm20608/samples") == 0) {
+		handleIcmSamplesRequest(clientFd, query);
 		return;
 	}
 	sendResponse(clientFd, 404, "Not Found", "text/plain", "not found", 9);

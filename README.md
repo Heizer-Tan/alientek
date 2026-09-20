@@ -241,13 +241,27 @@ ap3216c-read -w
 
 若手靠近传感器，`ps` 应上升；遮光/打光时，`als` 应变化。
 
+## ICM20608 演示
+
+设备树节点挂在 `ecspi3` CS0（`compatible = "alientek,icm20608"`），镜像内包含 `icm20608-module` 与 `icm20608-read`：
+
+```bash
+lsmod | grep icm20608
+icm20608-read
+icm20608-read -w
+# 示例：ax=... ay=... az=... gx=... gy=... gz=... temp_raw=... ax_g=... ay_g=... az_g=... gx_dps=... gy_dps=... gz_dps=... temp_c=...
+```
+
+静止时 `az_g` 约 ±1g，角速度接近 0。历史数据见下方 Web「六轴」页。
+
 ## 传感器入库与 Web 查询
 
-- 采集：`ap3216c-logger` 每 5 分钟写入 `/var/lib/ap3216c/ap3216c.db`，保留 7 天
-- 查询：浏览器打开 `http://<板子IP>:8080/`
-- 固件升级：同页「固件升级」上传 `.swu`（自动 A/B，成功后重启）
-- 启停：`/etc/init.d/ap3216c-logger start|stop`；`/etc/init.d/webserver start|stop`
-- 手动读数仍可用：`ap3216c-read`
+- 光感采集：`ap3216c-logger` 每 5 分钟写入 `/var/lib/ap3216c/ap3216c.db`，保留 7 天
+- 六轴采集：`icm20608-logger` 默认每 5 秒写入 `/var/lib/icm20608/icm20608.db`，保留 7 天
+- 查询：浏览器打开 `http://<板子IP>:8080/`（AP3216C）；六轴页 `http://<板子IP>:8080/icm20608`
+- 固件升级：光感首页「固件升级」上传 `.swu`（自动 A/B，成功后重启）
+- 启停：`/etc/init.d/ap3216c-logger`、`/etc/init.d/icm20608-logger`、`/etc/init.d/webserver`
+- 手动读数：`ap3216c-read`、`icm20608-read`
 
 ## 时间同步（NTP）
 

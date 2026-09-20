@@ -16,6 +16,8 @@ RDEPENDS:${PN} = " \
     libubootenv-bin \
     ap3216c-module \
     ap3216c-logger \
+    icm20608-module \
+    icm20608-logger \
     board-network \
     board-ntpdate \
     busybox-hwclock \

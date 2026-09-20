@@ -1,0 +1,72 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          icm20608-logger
+# Required-Start:    $local_fs
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: ICM20608 periodic sampling to SQLite
+### END INIT INFO
+
+# icm20608-logger SysV 脚本：默认开机自启
+
+NAME=icm20608-logger
+DAEMON=/usr/bin/icm20608-logger
+PIDFILE=/var/run/icm20608-logger.pid
+DEFAULTS=/etc/default/icm20608-logger
+
+[ -x "$DAEMON" ] || exit 0
+
+loadDefaults() {
+	if [ -f "$DEFAULTS" ]; then
+		set -a
+		# shellcheck disable=SC1090
+		. "$DEFAULTS"
+		set +a
+	fi
+}
+
+do_start() {
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "$NAME already running"
+		return 0
+	fi
+	loadDefaults
+	start-stop-daemon --start --quiet --background \
+		--make-pidfile --pidfile "$PIDFILE" \
+		--exec "$DAEMON"
+	echo "Started $NAME"
+}
+
+do_stop() {
+	start-stop-daemon --stop --quiet --pidfile "$PIDFILE" --retry 5
+	rm -f "$PIDFILE"
+	echo "Stopped $NAME"
+}
+
+case "$1" in
+start)
+	do_start
+	;;
+stop)
+	do_stop
+	;;
+restart)
+	do_stop
+	do_start
+	;;
+status)
+	if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+		echo "$NAME is running"
+		exit 0
+	fi
+	echo "$NAME is not running"
+	exit 3
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart|status}"
+	exit 1
+	;;
+esac
+
+exit 0

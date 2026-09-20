@@ -10,4 +10,5 @@ RDEPENDS:${PN} = " \
     key-monitor \
     touch-monitor \
     ap3216c-read \
+    icm20608-read \
 "

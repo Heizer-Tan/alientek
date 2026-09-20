@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ICM20608 六轴数据</title>
+<style>
+body { font-family: sans-serif; margin: 1rem 1.25rem; color: #222; }
+h1 { font-size: 1.35rem; margin: 0 0 0.5rem; }
+nav { margin-bottom: 1rem; font-size: 0.9rem; }
+nav a { color: #2980b9; }
+.controls { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: end; margin-bottom: 1rem; }
+label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 0.25rem; }
+input { padding: 0.35rem 0.5rem; }
+button { padding: 0.45rem 0.9rem; cursor: pointer; }
+#msg { margin: 0.5rem 0 1rem; color: #666; min-height: 1.2em; }
+h2 { font-size: 1.05rem; margin: 1.25rem 0 0.5rem; }
+canvas { width: 100%; max-width: 960px; height: 240px; border: 1px solid #ccc; display: block; }
+.legend { margin: 0.4rem 0 0.75rem; font-size: 0.85rem; }
+.legend span { margin-right: 1rem; }
+.x { color: #c0392b; }
+.y { color: #27ae60; }
+.z { color: #2980b9; }
+table { border-collapse: collapse; width: 100%; max-width: 1100px; margin-top: 1rem; font-size: 0.8rem; }
+th, td { border: 1px solid #ddd; padding: 0.35rem 0.45rem; text-align: left; }
+th { background: #f3f3f3; }
+.wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<nav><a href="/">← AP3216C 光感</a></nav>
+<h1>ICM20608 六轴数据</h1>
+<div class="controls">
+  <label>开始<input type="datetime-local" id="fromInput"></label>
+  <label>结束<input type="datetime-local" id="toInput"></label>
+  <button type="button" id="queryBtn">查询</button>
+</div>
+<p id="msg"></p>
+
+<h2>加速度 (g)</h2>
+<canvas id="accelChart" width="960" height="240"></canvas>
+<div class="legend">
+  <span class="x">■ ax_g</span>
+  <span class="y">■ ay_g</span>
+  <span class="z">■ az_g</span>
+</div>
+
+<h2>角速度 (°/s)</h2>
+<canvas id="gyroChart" width="960" height="240"></canvas>
+<div class="legend">
+  <span class="x">■ gx_dps</span>
+  <span class="y">■ gy_dps</span>
+  <span class="z">■ gz_dps</span>
+</div>
+
+<div class="wrap">
+<table>
+  <thead>
+    <tr>
+      <th>时间</th>
+      <th>ax</th><th>ay</th><th>az</th>
+      <th>gx</th><th>gy</th><th>gz</th>
+      <th>temp_raw</th>
+      <th>ax_g</th><th>ay_g</th><th>az_g</th>
+      <th>gx_dps</th><th>gy_dps</th><th>gz_dps</th>
+      <th>temp_c</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+</div>
+
+<script>
+(function () {
+  var fromInput = document.getElementById("fromInput");
+  var toInput = document.getElementById("toInput");
+  var queryBtn = document.getElementById("queryBtn");
+  var msg = document.getElementById("msg");
+  var tbody = document.getElementById("tbody");
+  var accelCanvas = document.getElementById("accelChart");
+  var gyroCanvas = document.getElementById("gyroChart");
+  var accelCtx = accelCanvas.getContext("2d");
+  var gyroCtx = gyroCanvas.getContext("2d");
+
+  function pad(n) { return n < 10 ? "0" + n : String(n); }
+
+  function toLocalInputValue(d) {
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  function inputToUnix(el) {
+    var v = el.value;
+    if (!v) return null;
+    var t = Date.parse(v);
+    if (isNaN(t)) return null;
+    return Math.floor(t / 1000);
+  }
+
+  function setDefaultRange() {
+    var now = new Date();
+    var from = new Date(now.getTime() - 24 * 3600 * 1000);
+    toInput.value = toLocalInputValue(now);
+    fromInput.value = toLocalInputValue(from);
+  }
+
+  function formatTs(ts) {
+    return new Date(ts * 1000).toLocaleString();
+  }
+
+  function clearTable() {
+    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+  }
+
+  function fillTable(rows) {
+    clearTable();
+    var sorted = rows.slice().sort(function (a, b) { return b.ts - a.ts; });
+    for (var i = 0; i < sorted.length; i++) {
+      var r = sorted[i];
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + formatTs(r.ts) + "</td>" +
+        "<td>" + r.ax + "</td><td>" + r.ay + "</td><td>" + r.az + "</td>" +
+        "<td>" + r.gx + "</td><td>" + r.gy + "</td><td>" + r.gz + "</td>" +
+        "<td>" + r.temp_raw + "</td>" +
+        "<td>" + r.ax_g + "</td><td>" + r.ay_g + "</td><td>" + r.az_g + "</td>" +
+        "<td>" + r.gx_dps + "</td><td>" + r.gy_dps + "</td><td>" + r.gz_dps + "</td>" +
+        "<td>" + r.temp_c + "</td>";
+      tbody.appendChild(tr);
+    }
+  }
+
+  function drawSeriesChart(canvas, ctx, rows, keys, colors) {
+    var w = canvas.width;
+    var h = canvas.height;
+    var padL = 48;
+    var padR = 16;
+    var padT = 16;
+    var padB = 28;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#fafafa";
+    ctx.fillRect(0, 0, w, h);
+    if (!rows || rows.length === 0) {
+      ctx.fillStyle = "#888";
+      ctx.font = "14px sans-serif";
+      ctx.fillText("暂无数据", padL, h / 2);
+      return;
+    }
+    var minT = rows[0].ts;
+    var maxT = rows[rows.length - 1].ts;
+    if (maxT === minT) maxT = minT + 1;
+    var minY = rows[0][keys[0]];
+    var maxY = minY;
+    for (var i = 0; i < rows.length; i++) {
+      for (var k = 0; k < keys.length; k++) {
+        var v = rows[i][keys[k]];
+        if (v < minY) minY = v;
+        if (v > maxY) maxY = v;
+      }
+    }
+    if (minY === maxY) {
+      minY -= 1;
+      maxY += 1;
+    }
+    function xOf(ts) {
+      return padL + (ts - minT) / (maxT - minT) * (w - padL - padR);
+    }
+    function yOf(val) {
+      return padT + (1 - (val - minY) / (maxY - minY)) * (h - padT - padB);
+    }
+    ctx.strokeStyle = "#ddd";
+    ctx.beginPath();
+    ctx.moveTo(padL, padT);
+    ctx.lineTo(padL, h - padB);
+    ctx.lineTo(w - padR, h - padB);
+    ctx.stroke();
+    for (var s = 0; s < keys.length; s++) {
+      ctx.strokeStyle = colors[s];
+      ctx.beginPath();
+      for (var j = 0; j < rows.length; j++) {
+        var x = xOf(rows[j].ts);
+        var y = yOf(rows[j][keys[s]]);
+        if (j === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  function query() {
+    var fromTs = inputToUnix(fromInput);
+    var toTs = inputToUnix(toInput);
+    if (fromTs === null || toTs === null || fromTs > toTs) {
+      msg.textContent = "时间范围无效";
+      return;
+    }
+    msg.textContent = "查询中…";
+    var url = "/api/icm20608/samples?from=" + fromTs + "&to=" + toTs;
+    fetch(url).then(function (res) {
+      return res.json().then(function (body) {
+        return { okHttp: res.ok, body: body };
+      });
+    }).then(function (r) {
+      if (!r.body || !r.body.ok) {
+        var m = (r.body && r.body.message) ? r.body.message : "查询失败";
+        throw new Error(m);
+      }
+      var rows = r.body.samples || [];
+      if (rows.length === 0) {
+        msg.textContent = "暂无数据";
+        clearTable();
+        drawSeriesChart(accelCanvas, accelCtx, [], [], []);
+        drawSeriesChart(gyroCanvas, gyroCtx, [], [], []);
+        return;
+      }
+      msg.textContent = "共 " + rows.length + " 条";
+      fillTable(rows);
+      drawSeriesChart(accelCanvas, accelCtx, rows,
+        ["ax_g", "ay_g", "az_g"], ["#c0392b", "#27ae60", "#2980b9"]);
+      drawSeriesChart(gyroCanvas, gyroCtx, rows,
+        ["gx_dps", "gy_dps", "gz_dps"], ["#c0392b", "#27ae60", "#2980b9"]);
+    }).catch(function (e) {
+      msg.textContent = "查询失败: " + e.message;
+      clearTable();
+      drawSeriesChart(accelCanvas, accelCtx, [], [], []);
+      drawSeriesChart(gyroCanvas, gyroCtx, [], [], []);
+    });
+  }
+
+  setDefaultRange();
+  queryBtn.addEventListener("click", query);
+  query();
+})();
+</script>
+</body>
+</html>

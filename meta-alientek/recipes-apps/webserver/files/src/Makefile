@@ -1,5 +1,5 @@
 TARGET = webserver
-SRCS = webserver.c webserver-http.c webserver-samples.c webserver-upgrade.c
+SRCS = webserver.c webserver-http.c webserver-samples.c webserver-icm.c webserver-upgrade.c
 CFLAGS ?= -Wall -O2
 LDFLAGS ?=
 LDLIBS = -lsqlite3

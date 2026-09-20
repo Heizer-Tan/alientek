@@ -18,6 +18,8 @@ typedef struct sqlite3 sqlite3;
 #define WEBSERVER_DEFAULT_PORT 8080
 #define WEBSERVER_DEFAULT_DB_PATH "/var/lib/ap3216c/ap3216c.db"
 #define WEBSERVER_DEFAULT_INDEX "/usr/share/webserver/index.html"
+#define WEBSERVER_DEFAULT_ICM_DB_PATH "/var/lib/icm20608/icm20608.db"
+#define WEBSERVER_DEFAULT_ICM_INDEX "/usr/share/webserver/icm20608.html"
 #define WEBSERVER_DEFAULT_APPLY "/usr/sbin/board-apply-update"
 #define WEBSERVER_DEFAULT_SWU_PATH "/var/tmp/web-upgrade.swu"
 #define WEBSERVER_DEFAULT_MIME_PATH "/var/tmp/web-upgrade.mime"
@@ -33,6 +35,8 @@ typedef struct WebserverCfg {
 	int port;
 	const char *dbPath;
 	const char *indexPath;
+	const char *icmDbPath;
+	const char *icmIndexPath;
 	const char *applyPath;
 	const char *swuPath;
 	const char *mimePath;
@@ -71,6 +75,10 @@ int openSamplesDb(sqlite3 **db);
 int querySamplesJson(sqlite3 *db, time_t fromTs, time_t toTs, char **outJson,
 		     size_t *outLen);
 void handleSamplesRequest(int clientFd, const char *query);
+
+/* ---------- ICM20608 六轴 ---------- */
+void handleIcmPageRequest(int clientFd);
+void handleIcmSamplesRequest(int clientFd, const char *query);
 
 /* ---------- 固件升级 ---------- */
 void handleUpgrade(int clientFd, const char *headers, const char *pref,
