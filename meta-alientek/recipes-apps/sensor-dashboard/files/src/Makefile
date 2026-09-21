@@ -4,7 +4,7 @@ CPPFLAGS ?=
 LDFLAGS ?=
 LDLIBS ?= -llvgl -lm -lpthread
 
-SRCS = main.c ui.c sensors.c
+SRCS = main.c ui.c sensors.c lv_font_dashboard.c
 OBJS = $(SRCS:.c=.o)
 TARGET = sensor-dashboard
 

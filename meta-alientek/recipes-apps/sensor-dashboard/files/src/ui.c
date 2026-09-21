@@ -8,6 +8,9 @@
 
 #include "lvgl/lvgl.h"
 
+/* 由 lv_font_dashboard.c 提供，覆盖界面里用到的汉字 */
+extern const lv_font_t lv_font_dashboard_20;
+
 enum PageId {
 	PAGE_HOME = 0,
 	PAGE_AP,
@@ -38,15 +41,22 @@ static struct UiState gUi;
 #define COL_MUTED    0x8FA3B8
 #define COL_DANGER   0xE05A5A
 
+static void useDashboardFont(lv_obj_t *obj)
+{
+	lv_obj_set_style_text_font(obj, &lv_font_dashboard_20, 0);
+}
+
 static void styleScreen(lv_obj_t *scr)
 {
 	lv_obj_set_style_bg_color(scr, lv_color_hex(COL_BG), 0);
 	lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 	lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+	useDashboardFont(scr);
 }
 
 static void styleTitle(lv_obj_t *lbl)
 {
+	useDashboardFont(lbl);
 	lv_obj_set_style_text_color(lbl, lv_color_hex(COL_TEXT), 0);
 	lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
 }
@@ -119,15 +129,18 @@ static lv_obj_t *makeCard(lv_obj_t *parent, const char *title, uint32_t accent,
 	lv_obj_set_style_pad_row(col, 10, 0);
 
 	titleLbl = lv_label_create(col);
+	useDashboardFont(titleLbl);
 	lv_label_set_text(titleLbl, title);
 	lv_obj_set_style_text_color(titleLbl, lv_color_hex(COL_TEXT), 0);
 
 	sumLbl = lv_label_create(col);
+	useDashboardFont(sumLbl);
 	lv_label_set_text(sumLbl, "读取中…");
 	lv_obj_set_style_text_color(sumLbl, lv_color_hex(COL_MUTED), 0);
 	*summaryOut = sumLbl;
 
 	hint = lv_label_create(col);
+	useDashboardFont(hint);
 	lv_label_set_text(hint, "点击进入详情 ›");
 	lv_obj_set_style_text_color(hint, lv_color_hex(accent), 0);
 	return btn;
@@ -147,6 +160,7 @@ static lv_obj_t *makeBackBtn(lv_obj_t *parent)
 	lv_obj_set_style_border_width(btn, 2, 0);
 	lv_obj_set_style_border_color(btn, lv_color_hex(COL_ACCENT), 0);
 	lbl = lv_label_create(btn);
+	useDashboardFont(lbl);
 	lv_label_set_text(lbl, "‹  返回");
 	lv_obj_set_style_text_color(lbl, lv_color_hex(COL_TEXT), 0);
 	lv_obj_center(lbl);
@@ -254,6 +268,7 @@ static void buildHome(void)
 	lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 28);
 
 	sub = lv_label_create(gUi.scrHome);
+	useDashboardFont(sub);
 	lv_label_set_text(sub, "选择模块查看实时数据");
 	lv_obj_set_style_text_color(sub, lv_color_hex(COL_MUTED), 0);
 	lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 68);
@@ -292,6 +307,7 @@ static void buildDetailPage(lv_obj_t **scr, const char *titleText,
 	lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
 
 	*detailLbl = lv_label_create(panel);
+	useDashboardFont(*detailLbl);
 	lv_label_set_text(*detailLbl, "读取中…");
 	lv_obj_set_style_text_color(*detailLbl, lv_color_hex(COL_MUTED), 0);
 	lv_obj_set_style_text_line_space(*detailLbl, 6, 0);

@@ -12,6 +12,7 @@ SRC_URI = " \
     file://src/ui.h \
     file://src/sensors.c \
     file://src/sensors.h \
+    file://src/lv_font_dashboard.c \
     file://src/Makefile \
     file://sensor-dashboard.init \
     file://sensor-dashboard.default \
@@ -26,7 +27,7 @@ INITSCRIPT_PARAMS = "defaults 90"
 do_compile() {
     ${CC} ${CFLAGS} ${LDFLAGS} \
         $(pkg-config --cflags lvgl 2>/dev/null || echo "-I${STAGING_INCDIR}/lvgl") \
-        -o sensor-dashboard main.c ui.c sensors.c \
+        -o sensor-dashboard main.c ui.c sensors.c lv_font_dashboard.c \
         $(pkg-config --libs lvgl 2>/dev/null || echo "-llvgl") \
         -lm -lpthread
 }
