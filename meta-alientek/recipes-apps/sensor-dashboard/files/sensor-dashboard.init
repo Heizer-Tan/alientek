@@ -5,7 +5,7 @@
 # Required-Stop:     $local_fs
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: LVGL sensor dashboard on LCD
+# Short-Description: Qt6 sensor dashboard on LCD (linuxfb)
 ### END INIT INFO
 
 NAME=sensor-dashboard
@@ -30,6 +30,7 @@ do_start() {
 		return 0
 	fi
 	loadDefaults
+	export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-linuxfb:fb=${SENSOR_DASHBOARD_FB:-/dev/fb0}}"
 	# 解绑帧缓冲控制台，避免 shell/登录提示叠在 GUI 上
 	for bind in /sys/class/vtconsole/vtcon*/bind; do
 		[ -w "$bind" ] || continue

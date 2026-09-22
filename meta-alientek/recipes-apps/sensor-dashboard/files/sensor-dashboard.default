@@ -1,7 +1,9 @@
-# sensor-dashboard 运行时配置
+# sensor-dashboard（Qt6 linuxfb）运行时配置
 # SENSOR_DASHBOARD_FB=/dev/fb0
-# SENSOR_DASHBOARD_TOUCH_DEV=   # 空则自动找 Goodix
+# SENSOR_DASHBOARD_TOUCH_DEV=   # 空则由 Qt evdev 自动枚举；可填 /dev/input/eventX
 # SENSOR_DASHBOARD_AP_DEV=/dev/ap3216c
 # SENSOR_DASHBOARD_ICM_DEV=/dev/icm20608
 # SENSOR_DASHBOARD_HOME_MS=1000
 # SENSOR_DASHBOARD_DETAIL_MS=500
+# QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0
+# QT_QPA_FONTDIR=/usr/share/fonts

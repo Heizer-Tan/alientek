@@ -18,12 +18,17 @@ if [[ -f "$root/kas/alientek-alpha.yml" ]]; then
     || fail "kas 未锁定主线 BSP"
   n_scarthgap=$(grep -c "branch: scarthgap" "$root/kas/alientek-alpha.yml" || true)
   n_wrynose=$(grep -c "branch: wrynose" "$root/kas/alientek-alpha.yml" || true)
-  if [[ "$n_scarthgap" -ne 3 ]]; then
-    fail "kas 必须三层均为 scarthgap（当前 scarthgap=$n_scarthgap）"
+  # poky / meta-openembedded / meta-freescale / meta-swupdate 均为 scarthgap
+  if [[ "$n_scarthgap" -lt 4 ]]; then
+    fail "kas 上游层须为 scarthgap（当前 scarthgap=$n_scarthgap，期望≥4）"
   fi
   if [[ "$n_wrynose" -ne 0 ]]; then
     fail "kas 不应再使用 wrynose（当前 wrynose=$n_wrynose）"
   fi
+  grep -q "meta-qt6:" "$root/kas/alientek-alpha.yml" \
+    || fail "kas 缺少 meta-qt6"
+  grep -q 'branch: "6.8"\|branch: '\''6.8'\''' "$root/kas/alientek-alpha.yml" \
+    || fail "kas meta-qt6 须使用 branch \"6.8\"（YAML 须加引号）"
 fi
 
 if [[ -f "$root/meta-alientek/conf/layer.conf" ]]; then
@@ -132,7 +137,8 @@ if [[ "${FULL:-1}" == "1" ]]; then
   grep -q "scarthgap" "$root/README.md" || fail "README 未说明 scarthgap"
   grep -q "imx6ull-alientek-alpha.dtb" "$root/scripts/export-nfs-tftp.sh" || fail "export-nfs-tftp.sh 未使用 imx6ull-alientek-alpha.dtb"
   grep -q "netboot" "$root/README.md" || fail "README 未写 netboot"
-  grep -q "/srv/nfs/alientek" "$root/README.md" || fail "README 未写 NFS 导出路径"
+  grep -q "/srv/nfs/nfs_rootfs\|/srv/nfs/alientek" "$root/README.md" \
+    || fail "README 未写 NFS 导出路径"
 fi
 
 [[ "$err" -eq 0 ]] || exit 1

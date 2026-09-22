@@ -8,6 +8,7 @@
 /poky/
 /meta-freescale/
 /meta-openembedded/
+/meta-qt6/
 meta-swupdate/
 /docs/
 .venv-pdf/

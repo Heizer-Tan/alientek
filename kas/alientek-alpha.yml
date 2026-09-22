@@ -18,12 +18,16 @@ repos:
     branch: scarthgap
     layers:
       meta-oe:
+      meta-python:
   meta-freescale:
     url: https://git.yoctoproject.org/git/meta-freescale
     branch: scarthgap
   meta-swupdate:
     url: https://github.com/sbabic/meta-swupdate.git
     branch: scarthgap
+  meta-qt6:
+    url: https://github.com/YoeDistro/meta-qt6.git
+    branch: "6.8"
   meta-alientek:
     path: meta-alientek
 
@@ -60,3 +64,9 @@ local_conf_header:
     ${KERNELORG_MIRROR}/linux/kernel/ https://mirrors.tuna.tsinghua.edu.cn/kernel/ \
     https://cdn.kernel.org/pub/linux/kernel/ https://mirrors.tuna.tsinghua.edu.cn/kernel/ \
     "
+  qt6-linuxfb: |
+    # 仪表盘只用 linuxfb；无 GPU / X11 / Wayland
+    DISTRO_FEATURES:remove = "x11 wayland opengl"
+    # code.qt.io 的 git:// 国内常超时且不走 http_proxy；改 GitHub HTTPS
+    QT_GIT = "git://github.com"
+    QT_GIT_PROTOCOL = "https"

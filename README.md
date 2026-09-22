@@ -256,11 +256,12 @@ icm20608-read -w
 
 ## LCD 传感器仪表盘
 
-镜像含 `sensor-dashboard`（LVGL + `/dev/fb0` + Goodix 触摸），开机自启：
+镜像含 `sensor-dashboard`（**Qt6 Widgets + linuxfb** `/dev/fb0` + evdev/Goodix 触摸），开机自启：
 
 - 主页两张卡片：光感 AP3216C / 六轴 ICM20608
 - 触摸进入详情，点「返回」回主页
 - 手动：`/etc/init.d/sensor-dashboard start|stop`
+- 可选环境变量见 `/etc/default/sensor-dashboard`（如 `QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0`、`SENSOR_DASHBOARD_TOUCH_DEV`）
 
 需确认 `ls -l /dev/fb0`，触摸为 Goodix event 节点。
 
