@@ -403,10 +403,11 @@ QWidget *Dashboard::buildKeysPage()
 	keyDetail_->setAlignment(Qt::AlignCenter);
 	keyDetail_->setStyleSheet(QStringLiteral(
 		"font-size: 48px; font-weight: 900; color: %1;"
-		" background-color: %2; border: 4px solid %3; padding: 24px;")
+		" background-color: %2; border: 4px double %3; padding: 24px;"
+		" background-image: none;")
 					  .arg(QLatin1String(kYellow),
-					       QLatin1String(kPanel),
-					       QLatin1String(kInk)));
+					       QLatin1String(kInk),
+					       QLatin1String(kMuted)));
 	auto *back = makeBackBtn(kCyan);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
 	lay->addWidget(title);
