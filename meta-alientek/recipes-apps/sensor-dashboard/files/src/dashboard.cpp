@@ -8,9 +8,11 @@
 #include "sysinfo.hpp"
 
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QTime>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -27,7 +29,6 @@ constexpr char kGreen[] = "#6BCB63";
 constexpr char kYellow[] = "#F7D51D";
 constexpr char kOrange[] = "#E85A4F";
 constexpr char kInk[] = "#0D0F18";
-constexpr char kHi[] = "#FFFFFF";
 
 QString pixelBtnStyle(const char *face)
 {
@@ -211,24 +212,49 @@ QWidget *Dashboard::buildHomePage()
 	lay->setContentsMargins(20, 16, 20, 16);
 	lay->setSpacing(10);
 
-	auto *brand = new QLabel(QString::fromUtf8("ALIENTEK"));
-	brand->setAlignment(Qt::AlignCenter);
-	brand->setStyleSheet(QStringLiteral(
-		"font-size: 14px; font-weight: 900; letter-spacing: 6px; color: %1;")
-				     .arg(QLatin1String(kYellow)));
+	/* 双线 HUD：品牌 / [OK] / 时钟 + █░ 装饰条 */
+	auto *hud = new QWidget;
+	hud->setObjectName(QStringLiteral("hud"));
+	hud->setStyleSheet(QStringLiteral(
+		"QWidget#hud {"
+		"  background-color: %1; color: %2;"
+		"  border: 4px double %3; padding: 8px 10px;"
+		"  font-family: monospace; font-weight: 900; font-size: 14px;"
+		"  background-image: none;"
+		"}")
+				   .arg(QLatin1String(kInk), QLatin1String(kText),
+					QLatin1String(kMuted)));
 
-	auto *title = new QLabel(QString::fromUtf8("◆ 板级控制台 ◆"));
-	title->setAlignment(Qt::AlignCenter);
-	title->setStyleSheet(titleStyle(kText));
+	auto *hudLay = new QVBoxLayout(hud);
+	hudLay->setContentsMargins(4, 2, 4, 2);
+	hudLay->setSpacing(2);
 
-	auto *bar = new QLabel(QString::fromUtf8("========================"));
-	bar->setAlignment(Qt::AlignCenter);
-	bar->setStyleSheet(QStringLiteral("font-family: monospace; color: %1;")
-				   .arg(QLatin1String(kMuted)));
+	auto *row = new QHBoxLayout;
+	auto *brand = new QLabel(QString::fromUtf8("▓ ALIENTEK"));
+	brand->setStyleSheet(QStringLiteral("color: %1; background: transparent;")
+				     .arg(QLatin1String(kCyan)));
+	auto *ok = new QLabel(QString::fromUtf8("[OK]"));
+	ok->setStyleSheet(QStringLiteral("color: %1; background: transparent;")
+				  .arg(QLatin1String(kGreen)));
+	ok->setAlignment(Qt::AlignCenter);
+	homeHudClock_ = new QLabel(QString::fromUtf8("--:--:--"));
+	homeHudClock_->setStyleSheet(
+		QStringLiteral("color: %1; background: transparent;")
+			.arg(QLatin1String(kYellow)));
+	homeHudClock_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+	row->addWidget(brand);
+	row->addWidget(ok, 1);
+	row->addWidget(homeHudClock_);
 
-	lay->addWidget(brand);
-	lay->addWidget(title);
-	lay->addWidget(bar);
+	homeHudBar_ = new QLabel(QString::fromUtf8("██████████████████░░░░░░"));
+	homeHudBar_->setStyleSheet(
+		QStringLiteral("color: %1; font-size: 10px; letter-spacing: 1px;"
+			       " background: transparent;")
+			.arg(QLatin1String(kPanelHi)));
+
+	hudLay->addLayout(row);
+	hudLay->addWidget(homeHudBar_);
+	lay->addWidget(hud);
 
 	auto *grid = new QGridLayout;
 	grid->setHorizontalSpacing(14);
@@ -527,6 +553,9 @@ void Dashboard::refreshOtaLabels()
 
 void Dashboard::onHomeTick()
 {
+	if (homeHudClock_)
+		homeHudClock_->setText(
+			QTime::currentTime().toString(QStringLiteral("HH:mm:ss")));
 	refreshApLabels();
 	refreshIcmLabels();
 	refreshSysLabels();
