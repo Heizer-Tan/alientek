@@ -66,7 +66,7 @@ need "meta-alientek/recipes-bsp/u-boot/u-boot_2025.04.bb"
 need "meta-alientek/recipes-bsp/u-boot/u-boot_%.bbappend"
 need "meta-alientek/recipes-bsp/u-boot/u-boot/boot.cmd"
 need "meta-alientek/recipes-bsp/u-boot/u-boot/mx6ull_aes_defconfig"
-need "meta-alientek/recipes-kernel/linux/linux/nfs.cfg"
+need "meta-alientek/recipes-kernel/linux/linux/board.cfg"
 
 aes="$root/meta-alientek/recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dtsi"
 if [[ -f "$aes" ]]; then
@@ -112,11 +112,11 @@ if [[ -f "$defcfg" ]]; then
     || fail "U-Boot BOOTCOMMAND 未设置 fdtfile"
 fi
 
-cfg="$root/meta-alientek/recipes-kernel/linux/linux/nfs.cfg"
+cfg="$root/meta-alientek/recipes-kernel/linux/linux/board.cfg"
 if [[ -f "$cfg" ]]; then
-  grep -q "CONFIG_ROOT_NFS=y" "$cfg" || fail "nfs.cfg 缺少 CONFIG_ROOT_NFS"
-  grep -q "CONFIG_IP_PNP=y" "$cfg" || fail "nfs.cfg 缺少 CONFIG_IP_PNP"
-  grep -q "# CONFIG_IP_PNP_DHCP is not set" "$cfg" || fail "nfs.cfg 应关闭 CONFIG_IP_PNP_DHCP（强制静态 IP）"
+  grep -q "CONFIG_ROOT_NFS=y" "$cfg" || fail "board.cfg 缺少 CONFIG_ROOT_NFS"
+  grep -q "CONFIG_IP_PNP=y" "$cfg" || fail "board.cfg 缺少 CONFIG_IP_PNP"
+  grep -q "# CONFIG_IP_PNP_DHCP is not set" "$cfg" || fail "board.cfg 应关闭 CONFIG_IP_PNP_DHCP（强制静态 IP）"
 fi
 
 if [[ "${FULL:-1}" == "1" ]]; then
