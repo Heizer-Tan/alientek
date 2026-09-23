@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT */
-/* sensor-dashboard：LCD 传感器仪表盘（Qt6 linuxfb + evdev） */
+/* sensor-dashboard：板级控制台（Qt6 linuxfb + evdev） */
 
 #include "dashboard.hpp"
 
@@ -56,11 +56,16 @@ int main(int argc, char **argv)
 	setupPlatformEnv();
 	QApplication app(argc, argv);
 	setupCjkFont(app);
+	app.setApplicationDisplayName(QString::fromUtf8("板级控制台"));
 
 	Dashboard w(QString::fromUtf8(envOr("SENSOR_DASHBOARD_AP_DEV", "/dev/ap3216c")),
 		    QString::fromUtf8(envOr("SENSOR_DASHBOARD_ICM_IIO_NAME", "icm20608")),
+		    QString::fromUtf8(envOr("SENSOR_DASHBOARD_IFACE", "eth0")),
+		    QString::fromUtf8(envOr("SENSOR_DASHBOARD_LED_NAME", "alientek-led0")),
+		    QString::fromUtf8(envOr("SENSOR_DASHBOARD_BEEP_NAME", "beep")),
 		    envInt("SENSOR_DASHBOARD_HOME_MS", 1000),
 		    envInt("SENSOR_DASHBOARD_DETAIL_MS", 500));
+	w.setWindowTitle(QString::fromUtf8("板级控制台"));
 	w.showFullScreen();
 	return app.exec();
 }

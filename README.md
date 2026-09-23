@@ -259,14 +259,18 @@ icm20608-read -w
 
 静止时 `az_g` 约 ±1g，角速度接近 0。历史数据见下方 Web「六轴」页。`ls /dev/icm20608` 应失败（已硬切掉 misc）。
 
-## LCD 传感器仪表盘
+## LCD 板级控制台
 
-镜像含 `sensor-dashboard`（**Qt6 Widgets + linuxfb** `/dev/fb0` + evdev/Goodix 触摸），开机自启：
+镜像含 `sensor-dashboard`（**Qt6 Widgets + linuxfb** `/dev/fb0` + evdev/Goodix 触摸），开机自启。窗口标题为「板级控制台」，主页 **2×3** 入口：
 
-- 主页两张卡片：光感 AP3216C / 六轴 ICM20608
-- 触摸进入详情，点「返回」回主页
-- 手动：`/etc/init.d/sensor-dashboard start|stop`
-- 可选环境变量见 `/etc/default/sensor-dashboard`（如 `QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0`、`SENSOR_DASHBOARD_TOUCH_DEV`、`SENSOR_DASHBOARD_ICM_IIO_NAME=icm20608`）
+- 光感 AP3216C / 六轴 ICM20608（详情页）
+- 系统信息（IP、运行时间、内存、负载）
+- 灯控（LED 开/关/恢复呼吸灯，蜂鸣器开/关）
+- 按键状态（`user-key`）
+- OTA 只读槽位（`fw_printenv`，升级仍走 Web）
+
+手动：`/etc/init.d/sensor-dashboard start|stop`  
+可选环境变量见 `/etc/default/sensor-dashboard`（如 `SENSOR_DASHBOARD_IFACE`、`SENSOR_DASHBOARD_LED_NAME`、`QT_QPA_PLATFORM`）。
 
 需确认 `ls -l /dev/fb0`，触摸为 Goodix event 节点。
 

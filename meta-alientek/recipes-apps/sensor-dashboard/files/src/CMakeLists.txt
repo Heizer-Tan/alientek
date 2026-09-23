@@ -11,7 +11,12 @@ add_executable(sensor-dashboard
 	main.cpp
 	dashboard.cpp
 	sensors.cpp
+	leds.cpp
+	sysinfo.cpp
+	ota_status.cpp
+	keys.cpp
 	iio-icm.c
+	input-device.c
 )
 target_link_libraries(sensor-dashboard PRIVATE Qt6::Widgets m)
 
