@@ -5,9 +5,13 @@ LIC_FILES_CHKSUM = "file://icm20608-logger.c;beginline=1;endline=1;md5=234d7d4ed
 DEPENDS = "sqlite3"
 RDEPENDS:${PN} = "sqlite3 libsqlite3"
 
+FILESEXTRAPATHS:prepend := "${THISDIR}/../common:"
+
 SRC_URI = " \
     file://src/icm20608-logger.c \
     file://src/Makefile \
+    file://iio-icm.c \
+    file://iio-icm.h \
     file://icm20608-logger.init \
     file://icm20608-logger.default \
 "
@@ -17,8 +21,12 @@ inherit update-rc.d
 INITSCRIPT_NAME = "icm20608-logger"
 INITSCRIPT_PARAMS = "defaults"
 
+do_configure() {
+    cp -f "${WORKDIR}/iio-icm.c" "${WORKDIR}/iio-icm.h" "${S}/"
+}
+
 do_compile() {
-    ${CC} ${CFLAGS} ${LDFLAGS} -o icm20608-logger icm20608-logger.c -lsqlite3
+    ${CC} ${CFLAGS} ${LDFLAGS} -o icm20608-logger icm20608-logger.c iio-icm.c -lsqlite3 -lm
 }
 
 do_install() {

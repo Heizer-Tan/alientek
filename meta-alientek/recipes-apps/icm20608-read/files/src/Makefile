@@ -7,8 +7,8 @@ DESTDIR ?=
 
 all: icm20608-read
 
-icm20608-read: icm20608-read.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+icm20608-read: icm20608-read.c iio-icm.c iio-icm.h
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ icm20608-read.c iio-icm.c -lm
 
 install: icm20608-read
 	install -d $(DESTDIR)$(PREFIX)/bin

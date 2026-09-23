@@ -1,6 +1,6 @@
 CC ?= gcc
 CFLAGS ?= -Wall -Wextra -O2
-LDLIBS = -lsqlite3
+LDLIBS = -lsqlite3 -lm
 PREFIX ?= /usr
 DESTDIR ?=
 
@@ -8,8 +8,8 @@ DESTDIR ?=
 
 all: icm20608-logger
 
-icm20608-logger: icm20608-logger.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+icm20608-logger: icm20608-logger.c iio-icm.c iio-icm.h
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ icm20608-logger.c iio-icm.c $(LDLIBS)
 
 install: icm20608-logger
 	install -d $(DESTDIR)$(PREFIX)/bin

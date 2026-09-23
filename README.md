@@ -243,16 +243,21 @@ ap3216c-read -w
 
 ## ICM20608 演示
 
-设备树节点挂在 `ecspi3` CS0（`compatible = "alientek,icm20608"`），镜像内包含 `icm20608-module` 与 `icm20608-read`：
+设备树节点挂在 `ecspi3` CS0（`compatible = "alientek,icm20608"`）。驱动为 **IIO sysfs**（不再提供 `/dev/icm20608`），镜像含 `icm20608-module` 与 `icm20608-read`：
 
 ```bash
 lsmod | grep icm20608
+# 确认 IIO 设备（name=icm20608）
+grep -H . /sys/bus/iio/devices/iio:device*/name
+# 可选：直接读 raw/scale
+# cat /sys/bus/iio/devices/iio:deviceX/in_accel_z_raw
 icm20608-read
 icm20608-read -w
 # 示例：ax=... ay=... az=... gx=... gy=... gz=... temp_raw=... ax_g=... ay_g=... az_g=... gx_dps=... gy_dps=... gz_dps=... temp_c=...
+# 环境变量 ICM20608_IIO_NAME 默认 icm20608
 ```
 
-静止时 `az_g` 约 ±1g，角速度接近 0。历史数据见下方 Web「六轴」页。
+静止时 `az_g` 约 ±1g，角速度接近 0。历史数据见下方 Web「六轴」页。`ls /dev/icm20608` 应失败（已硬切掉 misc）。
 
 ## LCD 传感器仪表盘
 
@@ -261,7 +266,7 @@ icm20608-read -w
 - 主页两张卡片：光感 AP3216C / 六轴 ICM20608
 - 触摸进入详情，点「返回」回主页
 - 手动：`/etc/init.d/sensor-dashboard start|stop`
-- 可选环境变量见 `/etc/default/sensor-dashboard`（如 `QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0`、`SENSOR_DASHBOARD_TOUCH_DEV`）
+- 可选环境变量见 `/etc/default/sensor-dashboard`（如 `QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0`、`SENSOR_DASHBOARD_TOUCH_DEV`、`SENSOR_DASHBOARD_ICM_IIO_NAME=icm20608`）
 
 需确认 `ls -l /dev/fb0`，触摸为 Goodix event 节点。
 

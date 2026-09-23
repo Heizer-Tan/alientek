@@ -1,52 +1,32 @@
 /* SPDX-License-Identifier: MIT */
-/* icm20608-logger：定时读取 /dev/icm20608 并写入 SQLite */
+/* icm20608-logger：定时读 IIO 并写入 SQLite */
 
-#include <stdio.h>
-#include <string.h>
+#include "iio-icm.h"
 
-#ifndef ICM20608_LOGGER_TEST_PARSE
 #include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <sqlite3.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
-#endif
 
-#define ICM20608_DEV_PATH "/dev/icm20608"
-#define ICM20608_DB_PATH  "/var/lib/icm20608/icm20608.db"
-#define ICM20608_DB_DIR   "/var/lib/icm20608"
+#define ICM20608_DB_PATH "/var/lib/icm20608/icm20608.db"
+#define ICM20608_DB_DIR "/var/lib/icm20608"
+#define ICM20608_DEFAULT_NAME "icm20608"
 #define DEFAULT_SAMPLE_INTERVAL_SEC 5
 #define DEFAULT_RETAIN_SECONDS (7 * 86400)
-#define ICM20608_BUF_SIZE 256
 
-struct IcmSample {
-	int ax;
-	int ay;
-	int az;
-	int gx;
-	int gy;
-	int gz;
-	int temp_raw;
-	double ax_g;
-	double ay_g;
-	double az_g;
-	double gx_dps;
-	double gy_dps;
-	double gz_dps;
-	double temp_c;
-};
-
-#ifndef ICM20608_LOGGER_TEST_PARSE
 static volatile sig_atomic_t gStopRequested = 0;
 static int gSampleIntervalSec = DEFAULT_SAMPLE_INTERVAL_SEC;
 static int gRetainSeconds = DEFAULT_RETAIN_SECONDS;
 static const char *gDbPath = ICM20608_DB_PATH;
 static const char *gDbDir = ICM20608_DB_DIR;
-static const char *gDevPath = ICM20608_DEV_PATH;
+static const char *gIioName = ICM20608_DEFAULT_NAME;
+static char *gSysfsDir = NULL;
 
 static void handleSignal(int sig)
 {
@@ -79,32 +59,11 @@ static void loadRuntimeConfig(void)
 	v = getenv("ICM20608_DB_DIR");
 	if (v && *v)
 		gDbDir = v;
-	v = getenv("ICM20608_DEV_PATH");
+	v = getenv("ICM20608_IIO_NAME");
 	if (v && *v)
-		gDevPath = v;
-}
-#endif
-
-/* 解析设备文本行；0 成功，非 0 失败 */
-static int parseSample(const char *line, struct IcmSample *out)
-{
-	struct IcmSample s;
-
-	if (!line || !out)
-		return -1;
-	if (sscanf(line,
-		   "ax=%d ay=%d az=%d gx=%d gy=%d gz=%d temp_raw=%d "
-		   "ax_g=%lf ay_g=%lf az_g=%lf gx_dps=%lf gy_dps=%lf "
-		   "gz_dps=%lf temp_c=%lf",
-		   &s.ax, &s.ay, &s.az, &s.gx, &s.gy, &s.gz, &s.temp_raw,
-		   &s.ax_g, &s.ay_g, &s.az_g, &s.gx_dps, &s.gy_dps, &s.gz_dps,
-		   &s.temp_c) != 14)
-		return -1;
-	*out = s;
-	return 0;
+		gIioName = v;
 }
 
-#ifndef ICM20608_LOGGER_TEST_PARSE
 static int ensureDbDir(void)
 {
 	if (mkdir(gDbDir, 0755) == 0)
@@ -143,7 +102,8 @@ static int openDb(sqlite3 **db)
 	}
 	rc = sqlite3_exec(*db, schema, NULL, NULL, &errMsg);
 	if (rc != SQLITE_OK) {
-		syslog(LOG_ERR, "schema: %s", errMsg ? errMsg : sqlite3_errmsg(*db));
+		syslog(LOG_ERR, "schema: %s",
+		       errMsg ? errMsg : sqlite3_errmsg(*db));
 		sqlite3_free(errMsg);
 		sqlite3_close(*db);
 		*db = NULL;
@@ -152,33 +112,18 @@ static int openDb(sqlite3 **db)
 	return 0;
 }
 
-static int readDeviceSample(struct IcmSample *out)
+static int readDeviceSample(struct IcmIioSample *out)
 {
-	char buf[ICM20608_BUF_SIZE];
-	ssize_t n;
-	int fd;
-
-	fd = open(gDevPath, O_RDONLY);
-	if (fd < 0) {
-		syslog(LOG_ERR, "open %s: %s", gDevPath, strerror(errno));
+	if (gSysfsDir == NULL || out == NULL)
 		return -1;
-	}
-	n = read(fd, buf, sizeof(buf) - 1);
-	if (n < 0) {
-		syslog(LOG_ERR, "read %s: %s", gDevPath, strerror(errno));
-		close(fd);
-		return -1;
-	}
-	buf[n] = '\0';
-	close(fd);
-	if (parseSample(buf, out) != 0) {
-		syslog(LOG_ERR, "parse sample: %s", buf);
+	if (iioIcmReadSample(gSysfsDir, out) != 0) {
+		syslog(LOG_ERR, "iioIcmReadSample %s failed", gSysfsDir);
 		return -1;
 	}
 	return 0;
 }
 
-static int insertSample(sqlite3 *db, time_t ts, const struct IcmSample *s)
+static int insertSample(sqlite3 *db, time_t ts, const struct IcmIioSample *s)
 {
 	sqlite3_stmt *stmt = NULL;
 	int rc;
@@ -241,7 +186,7 @@ static int purgeOldSamples(sqlite3 *db, time_t now)
 
 static int sampleOnce(sqlite3 *db)
 {
-	struct IcmSample s;
+	struct IcmIioSample s;
 	time_t now = time(NULL);
 
 	if (now == (time_t)-1) {
@@ -258,30 +203,7 @@ static int sampleOnce(sqlite3 *db)
 	       s.ax_g, s.ay_g, s.az_g, s.temp_c);
 	return 0;
 }
-#endif /* ICM20608_LOGGER_TEST_PARSE */
 
-#ifdef ICM20608_LOGGER_TEST_PARSE
-int main(void)
-{
-	struct IcmSample s;
-	const char *line =
-		"ax=-164 ay=328 az=16320 gx=12 gy=-8 gz=3 temp_raw=-1200 "
-		"ax_g=-0.0100 ay_g=0.0200 az_g=0.9956 gx_dps=0.732 "
-		"gy_dps=-0.488 gz_dps=0.183 temp_c=21.33\n";
-
-	if (parseSample(line, &s) != 0) {
-		fprintf(stderr, "parseSample test failed\n");
-		return 1;
-	}
-	if (s.ax != -164 || s.az != 16320 || s.temp_raw != -1200)
-		return 1;
-	if (s.ax_g < -0.011 || s.ax_g > -0.009)
-		return 1;
-	if (s.temp_c < 21.3 || s.temp_c > 21.4)
-		return 1;
-	return 0;
-}
-#else
 int main(void)
 {
 	sqlite3 *db = NULL;
@@ -294,16 +216,25 @@ int main(void)
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
 
+	gSysfsDir = iioIcmFindSysfsDir(gIioName);
+	if (gSysfsDir == NULL) {
+		syslog(LOG_ERR, "IIO device \"%s\" not found", gIioName);
+		closelog();
+		return 1;
+	}
+
 	if (ensureDbDir() != 0) {
+		free(gSysfsDir);
 		closelog();
 		return 1;
 	}
 	if (openDb(&db) != 0) {
+		free(gSysfsDir);
 		closelog();
 		return 1;
 	}
-	syslog(LOG_INFO, "started interval=%ds retain=%ds", gSampleIntervalSec,
-	       gRetainSeconds);
+	syslog(LOG_INFO, "started interval=%ds retain=%ds iio=%s",
+	       gSampleIntervalSec, gRetainSeconds, gIioName);
 
 	while (!gStopRequested) {
 		sampleOnce(db);
@@ -313,8 +244,8 @@ int main(void)
 	}
 
 	sqlite3_close(db);
+	free(gSysfsDir);
 	syslog(LOG_INFO, "stopped");
 	closelog();
 	return 0;
 }
-#endif

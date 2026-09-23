@@ -42,9 +42,9 @@ static void setupPlatformEnv()
 
 static void setupCjkFont(QApplication &app)
 {
-	QFont font(QString::fromUtf8("WenQuanYi Zen Hei"));
+	QFont font(QString::fromUtf8("WenQuanYi Micro Hei"));
 	if (!font.exactMatch())
-		font = QFont(QString::fromUtf8("WenQuanYi Micro Hei"));
+		font = QFont(QString::fromUtf8("WenQuanYi Zen Hei"));
 	if (!font.exactMatch())
 		font = QFont(QString::fromUtf8("Noto Sans CJK SC"));
 	font.setPointSize(16);
@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 	setupCjkFont(app);
 
 	Dashboard w(QString::fromUtf8(envOr("SENSOR_DASHBOARD_AP_DEV", "/dev/ap3216c")),
-		    QString::fromUtf8(envOr("SENSOR_DASHBOARD_ICM_DEV", "/dev/icm20608")),
+		    QString::fromUtf8(envOr("SENSOR_DASHBOARD_ICM_IIO_NAME", "icm20608")),
 		    envInt("SENSOR_DASHBOARD_HOME_MS", 1000),
 		    envInt("SENSOR_DASHBOARD_DETAIL_MS", 500));
 	w.showFullScreen();

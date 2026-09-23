@@ -1,25 +1,22 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * ICM20608 SPI misc 驱动：导出 /dev/icm20608，读取 accel/gyro/temp。
+ * ICM20608 SPI IIO 驱动：导出 accel / anglvel / temp sysfs（轮询 read_raw）。
  */
 
 #include <linux/delay.h>
-#include <linux/fs.h>
+#include <linux/iio/iio.h>
+#include <linux/iio/sysfs.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/math64.h>
-#include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
-#include <linux/slab.h>
 #include <linux/spi/spi.h>
-#include <linux/uaccess.h>
 
 #define ICM20608_DRV_NAME		"icm20608"
 #define ICM20608_WHO_AM_I_REG		0x75
-#define ICM20608_WHO_AM_I_VAL_AF		0xAF
-#define ICM20608_WHO_AM_I_VAL_AE		0xAE
+#define ICM20608_WHO_AM_I_VAL_AF	0xAF
+#define ICM20608_WHO_AM_I_VAL_AE	0xAE
 #define ICM20608_SMPLRT_DIV		0x19
 #define ICM20608_CONFIG			0x1A
 #define ICM20608_GYRO_CONFIG		0x1B
@@ -30,20 +27,21 @@
 #define ICM20608_ACCEL_XOUT_H		0x3B
 #define ICM20608_DATA_BYTES		14U
 #define ICM20608_READ_BIT		0x80U
-#define ICM20608_ACCEL_SCALE		16384
-#define ICM20608_GYRO_SCALE_NUM		164
-#define ICM20608_GYRO_SCALE_DEN		10
-#define ICM20608_TEMP_SCALE_NUM		3268
-#define ICM20608_TEMP_SCALE_DEN		10
-#define ICM20608_READ_BUF_SIZE		256U
 
-struct icm20608_data {
+/* ±2g：1 LSB = 1/16384 g */
+#define ICM20608_ACCEL_SCALE_NUM	1
+#define ICM20608_ACCEL_SCALE_DEN	16384
+/* ±2000 dps：与旧演示一致，scale = 10/164（即 /16.4） */
+#define ICM20608_GYRO_SCALE_NUM		10
+#define ICM20608_GYRO_SCALE_DEN		164
+/* temp_c = raw/326.8 + 25 → scale=10/3268；IIO:(raw+offset)*scale */
+#define ICM20608_TEMP_SCALE_NUM		10
+#define ICM20608_TEMP_SCALE_DEN		3268
+#define ICM20608_TEMP_OFFSET_RAW	8170 /* 25 * 3268 / 10 */
+
+struct icm20608_state {
 	struct spi_device *spi;
-	struct miscdevice miscdev;
 	struct mutex lock;
-};
-
-struct icm20608_sample {
 	s16 ax;
 	s16 ay;
 	s16 az;
@@ -56,31 +54,16 @@ struct icm20608_sample {
 static int icm20608_write_reg(struct spi_device *spi, u8 reg, u8 val)
 {
 	u8 tx[2] = { reg & 0x7FU, val };
-	struct spi_transfer t = {
-		.tx_buf = tx,
-		.len = 2,
-	};
-	struct spi_message m;
 
-	spi_message_init(&m);
-	spi_message_add_tail(&t, &m);
-	return spi_sync(spi, &m);
+	return spi_write(spi, tx, sizeof(tx));
 }
 
 static int icm20608_read_regs(struct spi_device *spi, u8 reg, u8 *buf,
 			      size_t len)
 {
 	u8 cmd = reg | ICM20608_READ_BIT;
-	struct spi_transfer t[2] = {
-		{ .tx_buf = &cmd, .len = 1 },
-		{ .rx_buf = buf, .len = len },
-	};
-	struct spi_message m;
 
-	spi_message_init(&m);
-	spi_message_add_tail(&t[0], &m);
-	spi_message_add_tail(&t[1], &m);
-	return spi_sync(spi, &m);
+	return spi_write_then_read(spi, &cmd, 1, buf, len);
 }
 
 static int icm20608_read_reg(struct spi_device *spi, u8 reg, u8 *val)
@@ -93,259 +76,226 @@ static s16 icm20608_be16(const u8 *p)
 	return (s16)(((u16)p[0] << 8) | p[1]);
 }
 
-static int icm20608_read_sample(struct icm20608_data *data,
-				struct icm20608_sample *out)
+/* 一次 burst 读满 14 字节并缓存到 state */
+static int icm20608_refresh_sample(struct icm20608_state *st)
 {
 	u8 buf[ICM20608_DATA_BYTES];
 	int ret;
 
-	ret = icm20608_read_regs(data->spi, ICM20608_ACCEL_XOUT_H, buf,
+	ret = icm20608_read_regs(st->spi, ICM20608_ACCEL_XOUT_H, buf,
 				 sizeof(buf));
 	if (ret < 0)
 		return ret;
 
-	out->ax = icm20608_be16(&buf[0]);
-	out->ay = icm20608_be16(&buf[2]);
-	out->az = icm20608_be16(&buf[4]);
-	out->temp_raw = icm20608_be16(&buf[6]);
-	out->gx = icm20608_be16(&buf[8]);
-	out->gy = icm20608_be16(&buf[10]);
-	out->gz = icm20608_be16(&buf[12]);
+	st->ax = icm20608_be16(&buf[0]);
+	st->ay = icm20608_be16(&buf[2]);
+	st->az = icm20608_be16(&buf[4]);
+	st->temp_raw = icm20608_be16(&buf[6]);
+	st->gx = icm20608_be16(&buf[8]);
+	st->gy = icm20608_be16(&buf[10]);
+	st->gz = icm20608_be16(&buf[12]);
 	return 0;
 }
 
-/* 定点：raw/scale，decimals 位小数，写入 buf，返回写入长度 */
-static int icm20608_scnprintf_div(char *buf, size_t size, s32 raw, s32 scale,
-				  unsigned int decimals)
+static int icm20608_raw_for_chan(struct icm20608_state *st,
+				 const struct iio_chan_spec *chan, int *val)
 {
-	u32 mul = 1;
-	u32 abs_raw;
-	u32 int_part;
-	u32 frac;
-	unsigned int i;
-	const int neg = raw < 0;
-	const s32 n = neg ? -raw : raw;
-
-	if (scale <= 0)
+	switch (chan->type) {
+	case IIO_ACCEL:
+		if (chan->channel2 == IIO_MOD_X)
+			*val = st->ax;
+		else if (chan->channel2 == IIO_MOD_Y)
+			*val = st->ay;
+		else
+			*val = st->az;
+		return IIO_VAL_INT;
+	case IIO_ANGL_VEL:
+		if (chan->channel2 == IIO_MOD_X)
+			*val = st->gx;
+		else if (chan->channel2 == IIO_MOD_Y)
+			*val = st->gy;
+		else
+			*val = st->gz;
+		return IIO_VAL_INT;
+	case IIO_TEMP:
+		*val = st->temp_raw;
+		return IIO_VAL_INT;
+	default:
 		return -EINVAL;
-	for (i = 0; i < decimals; ++i)
-		mul *= 10U;
-	abs_raw = (u32)n;
-	int_part = abs_raw / (u32)scale;
-	frac = ((abs_raw % (u32)scale) * mul) / (u32)scale;
-	if (neg)
-		return scnprintf(buf, size, "-%u.%0*u", int_part, decimals,
-				 frac);
-	return scnprintf(buf, size, "%u.%0*u", int_part, decimals, frac);
+	}
 }
 
-/* 陀螺仪：raw / 16.4 = raw * 10 / 164 */
-static int icm20608_scnprintf_gyro(char *buf, size_t size, s16 raw)
+static int icm20608_read_scale(const struct iio_chan_spec *chan, int *val,
+			       int *val2)
 {
-	s64 scaled;
-	s32 whole;
-	s32 frac;
-	int neg;
-
-	scaled = div_s64((s64)raw * (s64)ICM20608_GYRO_SCALE_DEN * 1000LL,
-			 ICM20608_GYRO_SCALE_NUM);
-	neg = scaled < 0;
-	if (neg)
-		scaled = -scaled;
-	whole = (s32)div_s64(scaled, 1000);
-	frac = (s32)(scaled - (s64)whole * 1000);
-	if (neg)
-		return scnprintf(buf, size, "-%d.%03d", whole, frac);
-	return scnprintf(buf, size, "%d.%03d", whole, frac);
+	switch (chan->type) {
+	case IIO_ACCEL:
+		*val = ICM20608_ACCEL_SCALE_NUM;
+		*val2 = ICM20608_ACCEL_SCALE_DEN;
+		return IIO_VAL_FRACTIONAL;
+	case IIO_ANGL_VEL:
+		*val = ICM20608_GYRO_SCALE_NUM;
+		*val2 = ICM20608_GYRO_SCALE_DEN;
+		return IIO_VAL_FRACTIONAL;
+	case IIO_TEMP:
+		*val = ICM20608_TEMP_SCALE_NUM;
+		*val2 = ICM20608_TEMP_SCALE_DEN;
+		return IIO_VAL_FRACTIONAL;
+	default:
+		return -EINVAL;
+	}
 }
 
-/* 温度：temp_raw/326.8 + 25，两位小数 */
-static int icm20608_scnprintf_temp(char *buf, size_t size, s16 temp_raw)
+static int icm20608_read_raw(struct iio_dev *indio_dev,
+			     struct iio_chan_spec const *chan, int *val,
+			     int *val2, long mask)
 {
-	s64 centi;
-	s32 whole;
-	s32 frac;
-	int neg;
-
-	centi = div_s64((s64)temp_raw * (s64)ICM20608_TEMP_SCALE_DEN * 100LL,
-			ICM20608_TEMP_SCALE_NUM) +
-		2500;
-	neg = centi < 0;
-	if (neg)
-		centi = -centi;
-	whole = (s32)div_s64(centi, 100);
-	frac = (s32)(centi - (s64)whole * 100);
-	if (neg)
-		return scnprintf(buf, size, "-%d.%02d", whole, frac);
-	return scnprintf(buf, size, "%d.%02d", whole, frac);
-}
-
-static int icm20608_format_line(char *buf, size_t size,
-				const struct icm20608_sample *s)
-{
-	char ax_g[16];
-	char ay_g[16];
-	char az_g[16];
-	char gx_dps[16];
-	char gy_dps[16];
-	char gz_dps[16];
-	char temp_c[16];
+	struct icm20608_state *st = iio_priv(indio_dev);
 	int ret;
 
-	ret = icm20608_scnprintf_div(ax_g, sizeof(ax_g), s->ax,
-				     ICM20608_ACCEL_SCALE, 4);
-	if (ret < 0)
+	switch (mask) {
+	case IIO_CHAN_INFO_RAW:
+		mutex_lock(&st->lock);
+		ret = icm20608_refresh_sample(st);
+		if (ret == 0)
+			ret = icm20608_raw_for_chan(st, chan, val);
+		mutex_unlock(&st->lock);
 		return ret;
-	ret = icm20608_scnprintf_div(ay_g, sizeof(ay_g), s->ay,
-				     ICM20608_ACCEL_SCALE, 4);
-	if (ret < 0)
-		return ret;
-	ret = icm20608_scnprintf_div(az_g, sizeof(az_g), s->az,
-				     ICM20608_ACCEL_SCALE, 4);
-	if (ret < 0)
-		return ret;
-	icm20608_scnprintf_gyro(gx_dps, sizeof(gx_dps), s->gx);
-	icm20608_scnprintf_gyro(gy_dps, sizeof(gy_dps), s->gy);
-	icm20608_scnprintf_gyro(gz_dps, sizeof(gz_dps), s->gz);
-	icm20608_scnprintf_temp(temp_c, sizeof(temp_c), s->temp_raw);
-
-	return scnprintf(buf, size,
-			 "ax=%d ay=%d az=%d gx=%d gy=%d gz=%d temp_raw=%d "
-			 "ax_g=%s ay_g=%s az_g=%s gx_dps=%s gy_dps=%s "
-			 "gz_dps=%s temp_c=%s\n",
-			 s->ax, s->ay, s->az, s->gx, s->gy, s->gz, s->temp_raw,
-			 ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, temp_c);
+	case IIO_CHAN_INFO_SCALE:
+		return icm20608_read_scale(chan, val, val2);
+	case IIO_CHAN_INFO_OFFSET:
+		if (chan->type != IIO_TEMP)
+			return -EINVAL;
+		/* (raw + 8170) * (10/3268) ≡ raw/326.8 + 25 */
+		*val = ICM20608_TEMP_OFFSET_RAW;
+		return IIO_VAL_INT;
+	default:
+		return -EINVAL;
+	}
 }
 
-static ssize_t icm20608_misc_read(struct file *file, char __user *userBuf,
-				  size_t count, loff_t *ppos)
-{
-	struct miscdevice *miscdev = file->private_data;
-	struct icm20608_data *data =
-		container_of(miscdev, struct icm20608_data, miscdev);
-	struct icm20608_sample sample;
-	char buf[ICM20608_READ_BUF_SIZE];
-	int len;
-	int ret;
-
-	if (*ppos != 0)
-		return 0;
-
-	mutex_lock(&data->lock);
-	ret = icm20608_read_sample(data, &sample);
-	mutex_unlock(&data->lock);
-	if (ret < 0)
-		return ret;
-
-	len = icm20608_format_line(buf, sizeof(buf), &sample);
-	if (len <= 0)
-		return -EINVAL;
-	if (count < (size_t)len)
-		return -EINVAL;
-	if (copy_to_user(userBuf, buf, len) != 0)
-		return -EFAULT;
-	*ppos += len;
-	return len;
+#define ICM20608_ACCEL_CHAN(_mod) {				\
+	.type = IIO_ACCEL,					\
+	.modified = 1,						\
+	.channel2 = _mod,					\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 }
 
-static loff_t icm20608_misc_llseek(struct file *file, const loff_t offset,
-				   const int whence)
-{
-	if (whence != SEEK_SET || offset != 0)
-		return -EINVAL;
-	file->f_pos = 0;
-	return 0;
+#define ICM20608_GYRO_CHAN(_mod) {				\
+	.type = IIO_ANGL_VEL,					\
+	.modified = 1,						\
+	.channel2 = _mod,					\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
 }
 
-static const struct file_operations icm20608_fops = {
-	.owner = THIS_MODULE,
-	.read = icm20608_misc_read,
-	.llseek = icm20608_misc_llseek,
+static const struct iio_chan_spec icm20608_channels[] = {
+	ICM20608_ACCEL_CHAN(IIO_MOD_X),
+	ICM20608_ACCEL_CHAN(IIO_MOD_Y),
+	ICM20608_ACCEL_CHAN(IIO_MOD_Z),
+	ICM20608_GYRO_CHAN(IIO_MOD_X),
+	ICM20608_GYRO_CHAN(IIO_MOD_Y),
+	ICM20608_GYRO_CHAN(IIO_MOD_Z),
+	{
+		.type = IIO_TEMP,
+		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
+				      BIT(IIO_CHAN_INFO_SCALE) |
+				      BIT(IIO_CHAN_INFO_OFFSET),
+	},
 };
 
-static int icm20608_hw_init(struct icm20608_data *data)
+static const struct iio_info icm20608_info = {
+	.read_raw = icm20608_read_raw,
+};
+
+static int icm20608_hw_init(struct icm20608_state *st)
 {
 	u8 who = 0;
 	int ret;
 
-	ret = icm20608_read_reg(data->spi, ICM20608_WHO_AM_I_REG, &who);
+	ret = icm20608_read_reg(st->spi, ICM20608_WHO_AM_I_REG, &who);
 	if (ret < 0)
 		return ret;
 	/* 板上常见 0xAF（ICM-20608-G）或 0xAE */
 	if (who != ICM20608_WHO_AM_I_VAL_AF && who != ICM20608_WHO_AM_I_VAL_AE) {
-		dev_err(&data->spi->dev, "unexpected WHO_AM_I 0x%02x\n", who);
+		dev_err(&st->spi->dev, "unexpected WHO_AM_I 0x%02x\n", who);
 		return -ENODEV;
 	}
-	dev_info(&data->spi->dev, "WHO_AM_I 0x%02x\n", who);
+	dev_info(&st->spi->dev, "WHO_AM_I 0x%02x\n", who);
 
-	ret = icm20608_write_reg(data->spi, ICM20608_PWR_MGMT_1, 0x80);
+	ret = icm20608_write_reg(st->spi, ICM20608_PWR_MGMT_1, 0x80);
 	if (ret < 0)
 		return ret;
 	msleep(50);
 
-	ret = icm20608_write_reg(data->spi, ICM20608_PWR_MGMT_1, 0x01);
+	ret = icm20608_write_reg(st->spi, ICM20608_PWR_MGMT_1, 0x01);
 	if (ret < 0)
 		return ret;
-	ret = icm20608_write_reg(data->spi, ICM20608_PWR_MGMT_2, 0x00);
+	ret = icm20608_write_reg(st->spi, ICM20608_PWR_MGMT_2, 0x00);
 	if (ret < 0)
 		return ret;
-	ret = icm20608_write_reg(data->spi, ICM20608_SMPLRT_DIV, 0x00);
+	ret = icm20608_write_reg(st->spi, ICM20608_SMPLRT_DIV, 0x00);
 	if (ret < 0)
 		return ret;
-	ret = icm20608_write_reg(data->spi, ICM20608_CONFIG, 0x04);
+	ret = icm20608_write_reg(st->spi, ICM20608_CONFIG, 0x04);
 	if (ret < 0)
 		return ret;
 	/* Gyro ±2000dps */
-	ret = icm20608_write_reg(data->spi, ICM20608_GYRO_CONFIG, 0x18);
+	ret = icm20608_write_reg(st->spi, ICM20608_GYRO_CONFIG, 0x18);
 	if (ret < 0)
 		return ret;
 	/* Accel ±2g */
-	ret = icm20608_write_reg(data->spi, ICM20608_ACCEL_CONFIG, 0x00);
+	ret = icm20608_write_reg(st->spi, ICM20608_ACCEL_CONFIG, 0x00);
 	if (ret < 0)
 		return ret;
-	return icm20608_write_reg(data->spi, ICM20608_ACCEL_CONFIG2, 0x04);
+	return icm20608_write_reg(st->spi, ICM20608_ACCEL_CONFIG2, 0x04);
 }
 
 static int icm20608_probe(struct spi_device *spi)
 {
-	struct icm20608_data *data;
+	struct iio_dev *indio_dev;
+	struct icm20608_state *st;
 	int ret;
 
-	data = devm_kzalloc(&spi->dev, sizeof(*data), GFP_KERNEL);
-	if (data == NULL)
+	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
+	if (indio_dev == NULL)
 		return -ENOMEM;
 
+	st = iio_priv(indio_dev);
 	spi->mode = SPI_MODE_0;
 	spi->bits_per_word = 8;
 	ret = spi_setup(spi);
 	if (ret < 0)
 		return ret;
 
-	data->spi = spi;
-	data->miscdev.minor = MISC_DYNAMIC_MINOR;
-	data->miscdev.name = ICM20608_DRV_NAME;
-	data->miscdev.fops = &icm20608_fops;
-	data->miscdev.parent = &spi->dev;
-	mutex_init(&data->lock);
+	st->spi = spi;
+	mutex_init(&st->lock);
 
-	ret = icm20608_hw_init(data);
+	indio_dev->name = ICM20608_DRV_NAME;
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->info = &icm20608_info;
+	indio_dev->channels = icm20608_channels;
+	indio_dev->num_channels = ARRAY_SIZE(icm20608_channels);
+
+	ret = icm20608_hw_init(st);
 	if (ret < 0)
 		return ret;
 
-	spi_set_drvdata(spi, data);
-	ret = misc_register(&data->miscdev);
+	spi_set_drvdata(spi, indio_dev);
+	ret = iio_device_register(indio_dev);
 	if (ret < 0)
 		return ret;
 
-	dev_info(&spi->dev, "ICM20608 ready on SPI\n");
+	dev_info(&spi->dev, "ICM20608 IIO ready on SPI\n");
 	return 0;
 }
 
 static void icm20608_remove(struct spi_device *spi)
 {
-	struct icm20608_data *data = spi_get_drvdata(spi);
+	struct iio_dev *indio_dev = spi_get_drvdata(spi);
 
-	misc_deregister(&data->miscdev);
+	iio_device_unregister(indio_dev);
 	icm20608_write_reg(spi, ICM20608_PWR_MGMT_1, 0x40);
 }
 
@@ -373,5 +323,5 @@ static struct spi_driver icm20608_driver = {
 module_spi_driver(icm20608_driver);
 
 MODULE_AUTHOR("Cursor Assistant");
-MODULE_DESCRIPTION("ICM20608 SPI misc driver for Alientek i.MX6ULL Alpha");
+MODULE_DESCRIPTION("ICM20608 SPI IIO driver for Alientek i.MX6ULL Alpha");
 MODULE_LICENSE("GPL");

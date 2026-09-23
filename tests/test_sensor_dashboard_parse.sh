@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# 宿主编译 sensors.cpp（TEST_PARSE）并断言解析
+# 宿主编译：AP 文本 parse + iioIcmConvert
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 src="$root/meta-alientek/recipes-apps/sensor-dashboard/files/src"
+common="$root/meta-alientek/recipes-apps/common"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -26,12 +27,6 @@ int main()
 		fail("ap ok");
 	if (parseApSample("bad", &a))
 		fail("ap bad");
-	IcmSample i{};
-	const char *line =
-		"ax=1 ay=2 az=3 gx=4 gy=5 gz=6 temp_raw=7 "
-		"ax_g=0.1 ay_g=0.2 az_g=0.9 gx_dps=0.0 gy_dps=0.0 gz_dps=0.0 temp_c=25.0";
-	if (!parseIcmSample(line, &i) || i.ax != 1 || i.az_g < 0.89 || !i.valid)
-		fail("icm ok");
 	std::puts("PASS");
 	return 0;
 }
@@ -39,3 +34,4 @@ EOF
 
 g++ -std=c++17 -Wall -Wextra -I"$src" -o "$tmp/t" "$tmp/test_parse.cpp"
 "$tmp/t"
+"$root/tests/test_iio_icm_convert.sh"

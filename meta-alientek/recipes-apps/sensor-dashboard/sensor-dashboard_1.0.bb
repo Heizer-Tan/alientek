@@ -4,14 +4,16 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://main.cpp;beginline=1;endline=1;md5=234d7d4edd08962c0144e4604050e0b6"
 
 DEPENDS = "qtbase"
-# qtbase-plugins 含 linuxfb/evdev；字体优先文泉驿正黑（meta-oe）
+# qtbase-plugins 含 linuxfb/evdev；字体用微米黑（约 5MiB，替代正黑约 17MiB）
 RDEPENDS:${PN} = " \
     qtbase \
     qtbase-plugins \
     ap3216c-module \
     icm20608-module \
-    ttf-wqy-zenhei \
+    ttf-wqy-microhei \
 "
+
+FILESEXTRAPATHS:prepend := "${THISDIR}/../common:"
 
 SRC_URI = " \
     file://src/main.cpp \
@@ -20,6 +22,8 @@ SRC_URI = " \
     file://src/sensors.cpp \
     file://src/sensors.hpp \
     file://src/CMakeLists.txt \
+    file://iio-icm.c \
+    file://iio-icm.h \
     file://sensor-dashboard.init \
     file://sensor-dashboard.default \
 "
@@ -29,6 +33,10 @@ inherit qt6-cmake update-rc.d
 
 INITSCRIPT_NAME = "sensor-dashboard"
 INITSCRIPT_PARAMS = "defaults 90"
+
+do_configure:prepend() {
+    cp -f "${WORKDIR}/iio-icm.c" "${WORKDIR}/iio-icm.h" "${S}/"
+}
 
 do_install:append() {
     install -d ${D}${sysconfdir}/init.d

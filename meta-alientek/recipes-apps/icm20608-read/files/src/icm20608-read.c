@@ -1,16 +1,17 @@
 /* SPDX-License-Identifier: MIT */
-/* icm20608-read：读取 /dev/icm20608，支持单次或循环打印 */
+/* icm20608-read：读 IIO sysfs，支持单次或循环打印 */
+
+#include "iio-icm.h"
 
 #include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#define ICM20608_DEV_PATH "/dev/icm20608"
-#define ICM20608_BUF_SIZE 256
 #define ICM20608_LOOP_DELAY_US 500000U
+#define ICM20608_DEFAULT_NAME "icm20608"
 
 static volatile sig_atomic_t gStopRequested = 0;
 
@@ -24,27 +25,32 @@ static void printUsage(const char *progName)
 {
 	fprintf(stderr, "用法: %s [-w]\n", progName);
 	fprintf(stderr, "  -w  持续循环读取\n");
+	fprintf(stderr, "环境变量 ICM20608_IIO_NAME 默认 icm20608\n");
 }
 
-static int readOnce(const int fd)
+static int printSample(const char *sysfsDir)
 {
-	char buf[ICM20608_BUF_SIZE];
-	const ssize_t n = read(fd, buf, sizeof(buf) - 1);
+	struct IcmIioSample s;
 
-	if (n < 0) {
-		fprintf(stderr, "icm20608-read: read: %s\n", strerror(errno));
+	if (iioIcmReadSample(sysfsDir, &s) != 0) {
+		fprintf(stderr, "icm20608-read: read IIO sample failed: %s\n",
+			strerror(errno));
 		return 1;
 	}
-	buf[n] = '\0';
-	fputs(buf, stdout);
+	printf("ax=%d ay=%d az=%d gx=%d gy=%d gz=%d temp_raw=%d "
+	       "ax_g=%.4f ay_g=%.4f az_g=%.4f gx_dps=%.3f gy_dps=%.3f "
+	       "gz_dps=%.3f temp_c=%.2f\n",
+	       s.ax, s.ay, s.az, s.gx, s.gy, s.gz, s.temp_raw, s.ax_g, s.ay_g,
+	       s.az_g, s.gx_dps, s.gy_dps, s.gz_dps, s.temp_c);
 	return 0;
 }
 
 int main(int argc, char *argv[])
 {
 	int loopMode = 0;
-	int fd;
 	struct sigaction sa;
+	const char *iioName;
+	char *sysfsDir;
 
 	if (argc > 2) {
 		printUsage(argv[0]);
@@ -63,35 +69,32 @@ int main(int argc, char *argv[])
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
 
-	fd = open(ICM20608_DEV_PATH, O_RDONLY);
-	if (fd < 0) {
-		fprintf(stderr, "icm20608-read: open %s: %s\n", ICM20608_DEV_PATH,
-			strerror(errno));
+	iioName = getenv("ICM20608_IIO_NAME");
+	if (iioName == NULL || iioName[0] == '\0')
+		iioName = ICM20608_DEFAULT_NAME;
+	sysfsDir = iioIcmFindSysfsDir(iioName);
+	if (sysfsDir == NULL) {
+		fprintf(stderr, "icm20608-read: IIO device \"%s\" not found\n",
+			iioName);
 		return 1;
 	}
 
 	if (loopMode != 0) {
 		while (!gStopRequested) {
-			if (readOnce(fd) != 0) {
-				close(fd);
+			if (printSample(sysfsDir) != 0) {
+				free(sysfsDir);
 				return 1;
 			}
 			usleep(ICM20608_LOOP_DELAY_US);
-			if (lseek(fd, 0, SEEK_SET) < 0) {
-				fprintf(stderr, "icm20608-read: lseek: %s\n",
-					strerror(errno));
-				close(fd);
-				return 1;
-			}
 		}
-		close(fd);
+		free(sysfsDir);
 		return 0;
 	}
 
-	if (readOnce(fd) != 0) {
-		close(fd);
+	if (printSample(sysfsDir) != 0) {
+		free(sysfsDir);
 		return 1;
 	}
-	close(fd);
+	free(sysfsDir);
 	return 0;
 }

@@ -1,5 +1,5 @@
-SUMMARY = "ICM20608 SPI misc driver"
-DESCRIPTION = "为阿尔法板 ICM20608 导出 /dev/icm20608"
+SUMMARY = "ICM20608 SPI IIO driver"
+DESCRIPTION = "为阿尔法板 ICM20608 导出 iio:device sysfs（accel/anglvel/temp）"
 LICENSE = "GPL-2.0-only"
 LIC_FILES_CHKSUM = "file://icm20608.c;beginline=1;endline=1;md5=a9f1449b768f69dcffc44cb5e556b102"
 

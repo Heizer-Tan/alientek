@@ -14,3 +14,4 @@ meta-swupdate/
 .venv-pdf/
 *.pyc
 __pycache__/
+.worktrees/
