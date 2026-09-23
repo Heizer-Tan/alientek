@@ -2,9 +2,11 @@
 /* sensor-dashboard：板级控制台（Qt6 linuxfb + evdev） */
 
 #include "dashboard.hpp"
+#include "nofocus_style.hpp"
 
 #include <QApplication>
 #include <QFont>
+#include <QStyleFactory>
 
 #include <cstdlib>
 
@@ -55,6 +57,11 @@ int main(int argc, char **argv)
 {
 	setupPlatformEnv();
 	QApplication app(argc, argv);
+	/* Fusion + 自定义 Style：彻底去掉虚线焦点框 */
+	if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion")))
+		app.setStyle(new NoFocusStyle(fusion));
+	else
+		app.setStyle(new NoFocusStyle);
 	setupCjkFont(app);
 	app.setApplicationDisplayName(QString::fromUtf8("板级控制台"));
 
