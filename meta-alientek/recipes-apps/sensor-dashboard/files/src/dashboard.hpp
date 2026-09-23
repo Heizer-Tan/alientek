@@ -78,7 +78,6 @@ private:
 	QLabel *homeKeySummary_ = nullptr;
 	QLabel *homeOtaSummary_ = nullptr;
 	QLabel *homeHudClock_ = nullptr;
-	QLabel *homeHudBar_ = nullptr;
 	QLabel *apDetail_ = nullptr;
 	QLabel *icmDetail_ = nullptr;
 	QLabel *sysDetail_ = nullptr;

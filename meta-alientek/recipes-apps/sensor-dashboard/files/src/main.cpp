@@ -49,13 +49,19 @@ static void setupCjkFont(QApplication &app)
 		font = QFont(QString::fromUtf8("WenQuanYi Zen Hei"));
 	if (!font.exactMatch())
 		font = QFont(QString::fromUtf8("Noto Sans CJK SC"));
-	font.setPointSize(16);
+	/* 像素字号 + 关抗锯齿：1024x600 上避免 pt/DPI 造成发糊 */
+	font.setPixelSize(20);
+	font.setStyleStrategy(QFont::NoAntialias);
+	font.setHintingPreference(QFont::PreferFullHinting);
 	app.setFont(font);
 }
 
 int main(int argc, char **argv)
 {
 	setupPlatformEnv();
+	/* 1pt≈1px，样式表里混用 px 时也不被错误 DPI 放大 */
+	if (qgetenv("QT_FONT_DPI").isEmpty())
+		qputenv("QT_FONT_DPI", "72");
 	QApplication app(argc, argv);
 	/* Fusion + 自定义 Style：彻底去掉虚线焦点框 */
 	if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion")))
@@ -73,6 +79,9 @@ int main(int argc, char **argv)
 		    envInt("SENSOR_DASHBOARD_HOME_MS", 1000),
 		    envInt("SENSOR_DASHBOARD_DETAIL_MS", 500));
 	w.setWindowTitle(QString::fromUtf8("板级控制台"));
-	w.showFullScreen();
+	/* 与 fbset 一致：1024x600，不信任 QScreen 可能偏大的 geometry */
+	w.setFixedSize(1024, 600);
+	w.move(0, 0);
+	w.show();
 	return app.exec();
 }

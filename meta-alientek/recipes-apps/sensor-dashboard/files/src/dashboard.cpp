@@ -11,6 +11,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QStackedWidget>
 #include <QTime>
 #include <QTimer>
@@ -32,18 +33,16 @@ constexpr char kInk[] = "#0D0F18";
 
 QString pixelBtnStyle(const char *face)
 {
-	/* 米白描边 + 按下反色；贴近掌机 LCD */
+	/* 主页卡片：紧凑 padding，避免 600 高屏被内容最小高度顶爆 */
 	return QStringLiteral(
 		"QPushButton {"
 		"  background-color: %1; color: %2;"
 		"  border: 3px solid %3; border-radius: 0px; outline: none;"
-		"  text-align: left; padding: 12px 14px; font-weight: bold;"
+		"  text-align: left; padding: 4px 8px; font-weight: bold;"
 		"}"
 		"QPushButton:focus { outline: none; border: 3px solid %3; }"
 		"QPushButton:pressed {"
 		"  background-color: %4; border: 3px solid %5;"
-		"  padding-top: 14px; padding-left: 16px;"
-		"  padding-bottom: 10px; padding-right: 12px;"
 		"}")
 		.arg(QLatin1String(face), QLatin1String(kText),
 		     QLatin1String(kText), QLatin1String(kPanelHi),
@@ -57,7 +56,7 @@ QString pixelActionStyle(const char * /*face*/)
 		"  background-color: %1; color: %2;"
 		"  border: 3px solid %2; border-radius: 0px; outline: none;"
 		"  text-align: center; padding: 10px; font-weight: bold;"
-		"  font-size: 16px;"
+		"  font-size: 20px;"
 		"}"
 		"QPushButton:focus { outline: none; }"
 		"QPushButton:pressed {"
@@ -70,7 +69,7 @@ QString pixelActionStyle(const char * /*face*/)
 QString titleStyle(const char *accent)
 {
 	return QStringLiteral(
-		"font-size: 22px; font-weight: 900; color: %1;"
+		"font-size: 26px; font-weight: 900; color: %1;"
 		" letter-spacing: 2px;")
 		.arg(QLatin1String(accent));
 }
@@ -78,7 +77,7 @@ QString titleStyle(const char *accent)
 QString monoStyle()
 {
 	return QStringLiteral(
-		"font-size: 18px; font-family: monospace; color: %1;"
+		"font-size: 22px; font-family: monospace; color: %1;"
 		" background-color: %2; border: 4px double %3; padding: 12px;")
 		.arg(QLatin1String(kText), QLatin1String(kInk),
 		     QLatin1String(kMuted));
@@ -99,7 +98,7 @@ void noFocus(QPushButton *b)
 QPushButton *makeBackBtn(const char *face)
 {
 	auto *back = new QPushButton(QString::fromUtf8("[ 返回 ]"));
-	back->setMinimumHeight(56);
+	back->setMinimumHeight(64);
 	back->setStyleSheet(pixelActionStyle(face));
 	noFocus(back);
 	return back;
@@ -172,33 +171,30 @@ QPushButton *Dashboard::makeHomeCard(const QString &title, QLabel **summaryOut,
 {
 	auto *btn = new QPushButton;
 	noFocus(btn);
-	btn->setMinimumHeight(128);
+	/* 固定适中高度，不纵向铺满；三行 + HUD 需落在 600 内 */
+	btn->setFixedHeight(150);
+	btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 	btn->setCursor(Qt::PointingHandCursor);
 	btn->setStyleSheet(pixelBtnStyle(kPanel));
 	auto *col = new QVBoxLayout(btn);
-	col->setContentsMargins(8, 4, 8, 4);
-	col->setSpacing(6);
+	col->setContentsMargins(8, 6, 8, 6);
+	col->setSpacing(4);
 
 	auto *tag = new QLabel(QString::fromUtf8("▌") + title);
 	tag->setAttribute(Qt::WA_TransparentForMouseEvents);
-	tag->setStyleSheet(QStringLiteral("font-size: 20px; font-weight: 900; color: %1;")
+	tag->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 900; color: %1;")
 				   .arg(QLatin1String(accent)));
 
 	auto *sum = new QLabel(QString::fromUtf8("..."));
 	sum->setAttribute(Qt::WA_TransparentForMouseEvents);
+	sum->setWordWrap(false);
 	sum->setStyleSheet(QStringLiteral(
-				   "font-size: 15px; font-family: monospace; color: %1;")
+				   "font-size: 16px; font-family: monospace; color: %1;")
 				   .arg(QLatin1String(kMuted)));
-
-	auto *hint = new QLabel(QString::fromUtf8("> ENTER"));
-	hint->setAttribute(Qt::WA_TransparentForMouseEvents);
-	hint->setStyleSheet(QStringLiteral("font-size: 12px; color: %1;")
-				    .arg(QLatin1String(accent)));
 
 	col->addWidget(tag);
 	col->addWidget(sum);
 	col->addStretch(1);
-	col->addWidget(hint);
 	if (summaryOut)
 		*summaryOut = sum;
 	return btn;
@@ -209,27 +205,26 @@ QWidget *Dashboard::buildHomePage()
 	auto *page = new QWidget;
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
-	lay->setContentsMargins(20, 16, 20, 16);
-	lay->setSpacing(10);
+	lay->setContentsMargins(12, 8, 12, 8);
+	lay->setSpacing(8);
 
-	/* 双线 HUD：品牌 / [OK] / 时钟 + █░ 装饰条 */
+	/* 单行 HUD */
 	auto *hud = new QWidget;
 	hud->setObjectName(QStringLiteral("hud"));
+	hud->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 	hud->setStyleSheet(QStringLiteral(
 		"QWidget#hud {"
 		"  background-color: %1; color: %2;"
-		"  border: 4px double %3; padding: 8px 10px;"
-		"  font-family: monospace; font-weight: 900; font-size: 14px;"
+		"  border: 3px double %3; padding: 4px 8px;"
+		"  font-family: monospace; font-weight: 900; font-size: 16px;"
 		"  background-image: none;"
 		"}")
 				   .arg(QLatin1String(kInk), QLatin1String(kText),
 					QLatin1String(kMuted)));
 
-	auto *hudLay = new QVBoxLayout(hud);
+	auto *hudLay = new QHBoxLayout(hud);
 	hudLay->setContentsMargins(4, 2, 4, 2);
-	hudLay->setSpacing(2);
-
-	auto *row = new QHBoxLayout;
+	hudLay->setSpacing(8);
 	auto *brand = new QLabel(QString::fromUtf8("▓ ALIENTEK"));
 	brand->setStyleSheet(QStringLiteral("color: %1; background: transparent;")
 				     .arg(QLatin1String(kCyan)));
@@ -242,23 +237,15 @@ QWidget *Dashboard::buildHomePage()
 		QStringLiteral("color: %1; background: transparent;")
 			.arg(QLatin1String(kYellow)));
 	homeHudClock_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-	row->addWidget(brand);
-	row->addWidget(ok, 1);
-	row->addWidget(homeHudClock_);
-
-	homeHudBar_ = new QLabel(QString::fromUtf8("██████████████████░░░░░░"));
-	homeHudBar_->setStyleSheet(
-		QStringLiteral("color: %1; font-size: 10px; letter-spacing: 1px;"
-			       " background: transparent;")
-			.arg(QLatin1String(kPanelHi)));
-
-	hudLay->addLayout(row);
-	hudLay->addWidget(homeHudBar_);
-	lay->addWidget(hud);
+	hudLay->addWidget(brand);
+	hudLay->addWidget(ok, 1);
+	hudLay->addWidget(homeHudClock_);
+	lay->addWidget(hud, 0);
 
 	auto *grid = new QGridLayout;
-	grid->setHorizontalSpacing(14);
-	grid->setVerticalSpacing(14);
+	grid->setHorizontalSpacing(10);
+	grid->setVerticalSpacing(8);
+	grid->setContentsMargins(0, 0, 0, 0);
 	auto *apBtn = makeHomeCard(QString::fromUtf8("光感"), &homeApSummary_, kCyan);
 	auto *icmBtn =
 		makeHomeCard(QString::fromUtf8("六轴"), &homeIcmSummary_, kGreen);
@@ -282,7 +269,9 @@ QWidget *Dashboard::buildHomePage()
 	grid->addWidget(ledBtn, 1, 1);
 	grid->addWidget(keyBtn, 2, 0);
 	grid->addWidget(otaBtn, 2, 1);
-	lay->addLayout(grid, 1);
+	lay->addLayout(grid, 0);
+	/* 剩余高度留白，不把卡片纵向拉满 */
+	lay->addStretch(1);
 	return page;
 }
 
@@ -366,7 +355,7 @@ QWidget *Dashboard::buildLedsPage()
 	auto *beepOn = new QPushButton(QString::fromUtf8("[ 蜂鸣器 开 ]"));
 	auto *beepOff = new QPushButton(QString::fromUtf8("[ 蜂鸣器 关 ]"));
 	for (QPushButton *b : {ledOn, ledOff, ledHb, beepOn, beepOff}) {
-		b->setMinimumHeight(48);
+		b->setMinimumHeight(56);
 		b->setStyleSheet(pixelActionStyle(kPanel));
 		noFocus(b);
 	}
@@ -402,7 +391,7 @@ QWidget *Dashboard::buildKeysPage()
 	keyDetail_ = new QLabel(QString::fromUtf8("松开"));
 	keyDetail_->setAlignment(Qt::AlignCenter);
 	keyDetail_->setStyleSheet(QStringLiteral(
-		"font-size: 48px; font-weight: 900; color: %1;"
+		"font-size: 56px; font-weight: 900; color: %1;"
 		" background-color: %2; border: 4px double %3; padding: 24px;"
 		" background-image: none;")
 					  .arg(QLatin1String(kYellow),

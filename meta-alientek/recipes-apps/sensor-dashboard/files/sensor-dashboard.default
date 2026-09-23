@@ -10,3 +10,4 @@
 # SENSOR_DASHBOARD_DETAIL_MS=500
 # QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0
 # QT_QPA_FONTDIR=/usr/share/fonts
+# QT_FONT_DPI=72
