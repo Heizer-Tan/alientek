@@ -39,9 +39,9 @@ do_start() {
 			echo 0 > "$bind" 2>/dev/null || true
 		fi
 	done
-	# 切到图形模式并清屏（忽略失败）
+	# 切到图形模式并清屏；保留光标显示（不发 ?25l）
 	if [ -c /dev/tty0 ]; then
-		printf '\033[2J\033[H\033[?25l' > /dev/tty0 2>/dev/null || true
+		printf '\033[2J\033[H\033[?25h' > /dev/tty0 2>/dev/null || true
 	fi
 	start-stop-daemon --start --quiet --background \
 		--make-pidfile --pidfile "$PIDFILE" \
