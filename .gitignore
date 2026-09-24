@@ -16,3 +16,5 @@ meta-swupdate/
 __pycache__/
 .worktrees/
 .superpowers/
+# 设计/计划 Markdown：本地可留，不入库
+meta-alientek/**/docs/
