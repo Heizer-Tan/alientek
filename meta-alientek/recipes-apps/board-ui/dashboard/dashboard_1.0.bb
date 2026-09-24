@@ -16,49 +16,49 @@ RDEPENDS:${PN} = " \
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/../../common:"
 
-
 SRC_URI = " \
     file://src/main.cpp \
-    file://src/nofocus_style.hpp \
-    file://src/dashboard.cpp \
-    file://src/dashboard.hpp \
-    file://src/sensors.cpp \
-    file://src/sensors.hpp \
-    file://src/leds.cpp \
-    file://src/leds.hpp \
-    file://src/sysinfo.cpp \
-    file://src/sysinfo.hpp \
-    file://src/ota_status.cpp \
-    file://src/ota_status.hpp \
-    file://src/keys.cpp \
-    file://src/keys.hpp \
+    file://src/ui/style/nofocus_style.hpp \
+    file://src/ui/dashboard/dashboard.cpp \
+    file://src/ui/dashboard/dashboard.hpp \
+    file://src/hw/sensors/sensors.cpp \
+    file://src/hw/sensors/sensors.hpp \
+    file://src/hw/leds/leds.cpp \
+    file://src/hw/leds/leds.hpp \
+    file://src/sys/sysinfo/sysinfo.cpp \
+    file://src/sys/sysinfo/sysinfo.hpp \
+    file://src/sys/ota/ota_status.cpp \
+    file://src/sys/ota/ota_status.hpp \
+    file://src/hw/keys/keys.cpp \
+    file://src/hw/keys/keys.hpp \
     file://src/CMakeLists.txt \
     file://iio-icm.c \
     file://iio-icm.h \
     file://input-device.c \
     file://input-device.h \
-    file://sensor-dashboard.init \
-    file://sensor-dashboard.default \
+    file://dashboard.init \
+    file://dashboard.default \
 "
 S = "${WORKDIR}/src"
 
 inherit qt6-cmake update-rc.d
 
-INITSCRIPT_NAME = "sensor-dashboard"
+INITSCRIPT_NAME = "dashboard"
 INITSCRIPT_PARAMS = "defaults 90"
 
 do_configure:prepend() {
+    install -d ${S}/hw
     cp -f "${WORKDIR}/iio-icm.c" "${WORKDIR}/iio-icm.h" \
-          "${WORKDIR}/input-device.c" "${WORKDIR}/input-device.h" "${S}/"
+          "${WORKDIR}/input-device.c" "${WORKDIR}/input-device.h" "${S}/hw/"
 }
 
 do_install:append() {
     install -d ${D}${sysconfdir}/init.d
-    install -m 0755 ${WORKDIR}/sensor-dashboard.init \
-        ${D}${sysconfdir}/init.d/sensor-dashboard
+    install -m 0755 ${WORKDIR}/dashboard.init \
+        ${D}${sysconfdir}/init.d/dashboard
     install -d ${D}${sysconfdir}/default
-    install -m 0644 ${WORKDIR}/sensor-dashboard.default \
-        ${D}${sysconfdir}/default/sensor-dashboard
+    install -m 0644 ${WORKDIR}/dashboard.default \
+        ${D}${sysconfdir}/default/dashboard
 }
 
-FILES:${PN} += "${sysconfdir}/init.d/sensor-dashboard ${sysconfdir}/default/sensor-dashboard"
+FILES:${PN} += "${sysconfdir}/init.d/dashboard ${sysconfdir}/default/dashboard"

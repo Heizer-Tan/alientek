@@ -40,7 +40,7 @@ bool KeyWatcher::openByNameSubstr(const QString &nameSubstr)
 {
 	closeDevice();
 	const QByteArray name = nameSubstr.toUtf8();
-	fd_ = inputFindDeviceByName(name.constData(), "sensor-dashboard", 1);
+	fd_ = inputFindDeviceByName(name.constData(), "dashboard", 1);
 	if (fd_ < 0)
 		return false;
 	notifier_ = new QSocketNotifier(fd_, QSocketNotifier::Read, this);

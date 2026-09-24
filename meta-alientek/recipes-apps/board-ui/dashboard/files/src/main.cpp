@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: MIT */
-/* sensor-dashboard：板级控制台（Qt6 linuxfb + evdev） */
+/* dashboard：板级控制台（Qt6 linuxfb + evdev） */
 
-#include "dashboard.hpp"
-#include "nofocus_style.hpp"
+#include "ui/dashboard/dashboard.hpp"
+#include "ui/style/nofocus_style.hpp"
 
 #include <QApplication>
 #include <QFont>
@@ -32,12 +32,12 @@ static int envInt(const char *name, int fallback)
 
 static void setupPlatformEnv()
 {
-	const char *fb = envOr("SENSOR_DASHBOARD_FB", "/dev/fb0");
+	const char *fb = envOr("DASHBOARD_FB", "/dev/fb0");
 	if (qgetenv("QT_QPA_PLATFORM").isEmpty()) {
 		QByteArray plat = QByteArray("linuxfb:fb=") + fb;
 		qputenv("QT_QPA_PLATFORM", plat);
 	}
-	const char *touch = std::getenv("SENSOR_DASHBOARD_TOUCH_DEV");
+	const char *touch = std::getenv("DASHBOARD_TOUCH_DEV");
 	if (touch && *touch)
 		qputenv("QT_QPA_EVDEV_TOUCHSCREEN_PARAMETERS", touch);
 }
@@ -71,13 +71,13 @@ int main(int argc, char **argv)
 	setupCjkFont(app);
 	app.setApplicationDisplayName(QString::fromUtf8("板级控制台"));
 
-	Dashboard w(QString::fromUtf8(envOr("SENSOR_DASHBOARD_AP_DEV", "/dev/ap3216c")),
-		    QString::fromUtf8(envOr("SENSOR_DASHBOARD_ICM_IIO_NAME", "icm20608")),
-		    QString::fromUtf8(envOr("SENSOR_DASHBOARD_IFACE", "eth0")),
-		    QString::fromUtf8(envOr("SENSOR_DASHBOARD_LED_NAME", "alientek-led0")),
-		    QString::fromUtf8(envOr("SENSOR_DASHBOARD_BEEP_NAME", "beep")),
-		    envInt("SENSOR_DASHBOARD_HOME_MS", 1000),
-		    envInt("SENSOR_DASHBOARD_DETAIL_MS", 500));
+	Dashboard w(QString::fromUtf8(envOr("DASHBOARD_AP_DEV", "/dev/ap3216c")),
+		    QString::fromUtf8(envOr("DASHBOARD_ICM_IIO_NAME", "icm20608")),
+		    QString::fromUtf8(envOr("DASHBOARD_IFACE", "eth0")),
+		    QString::fromUtf8(envOr("DASHBOARD_LED_NAME", "alientek-led0")),
+		    QString::fromUtf8(envOr("DASHBOARD_BEEP_NAME", "beep")),
+		    envInt("DASHBOARD_HOME_MS", 1000),
+		    envInt("DASHBOARD_DETAIL_MS", 500));
 	w.setWindowTitle(QString::fromUtf8("板级控制台"));
 	/* 与 fbset 一致：1024x600，不信任 QScreen 可能偏大的 geometry */
 	w.setFixedSize(1024, 600);

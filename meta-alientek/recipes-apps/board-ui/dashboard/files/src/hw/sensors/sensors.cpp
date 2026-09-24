@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <cstring>
 
-#ifndef SENSOR_DASHBOARD_TEST_PARSE
+#ifndef DASHBOARD_TEST_PARSE
 #include <cstdlib>
 #include <errno.h>
 #include <fcntl.h>
@@ -35,7 +35,7 @@ bool parseApSample(const char *line, ApSample *out)
 	return true;
 }
 
-#ifndef SENSOR_DASHBOARD_TEST_PARSE
+#ifndef DASHBOARD_TEST_PARSE
 static bool readDevLine(const char *devPath, char *buf, size_t bufSize)
 {
 	int fd;

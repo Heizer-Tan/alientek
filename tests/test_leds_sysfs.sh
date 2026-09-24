@@ -2,7 +2,7 @@
 # 宿主单测：LED sysfs 状态机（假目录）
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
-src="$root/meta-alientek/recipes-apps/sensor-dashboard/files/src"
+src="$root/meta-alientek/recipes-apps/board-ui/dashboard/files/src/hw/leds"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

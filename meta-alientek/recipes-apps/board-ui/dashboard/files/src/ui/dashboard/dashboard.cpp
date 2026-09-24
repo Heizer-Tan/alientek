@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: MIT */
 #include "dashboard.hpp"
 
-#include "keys.hpp"
-#include "leds.hpp"
-#include "ota_status.hpp"
-#include "sensors.hpp"
-#include "sysinfo.hpp"
+#include "hw/keys/keys.hpp"
+#include "hw/leds/leds.hpp"
+#include "hw/sensors/sensors.hpp"
+#include "sys/ota/ota_status.hpp"
+#include "sys/sysinfo/sysinfo.hpp"
 
 #include <QGridLayout>
 #include <QHBoxLayout>

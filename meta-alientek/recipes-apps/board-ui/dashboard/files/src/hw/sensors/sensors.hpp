@@ -29,7 +29,7 @@ struct IcmSample {
 /* 解析 AP 设备文本行；成功返回 true */
 bool parseApSample(const char *line, ApSample *out);
 
-#ifndef SENSOR_DASHBOARD_TEST_PARSE
+#ifndef DASHBOARD_TEST_PARSE
 bool readApSample(const char *devPath, ApSample *out);
 /* iioName：IIO name（默认 icm20608），非 /dev 路径 */
 bool readIcmSample(const char *iioName, IcmSample *out);

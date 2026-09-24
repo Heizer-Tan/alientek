@@ -1,0 +1,13 @@
+# dashboard（板级控制台 / Qt6 linuxfb）运行时配置
+# DASHBOARD_FB=/dev/fb0
+# DASHBOARD_TOUCH_DEV=   # 空则由 Qt evdev 自动枚举；可填 /dev/input/eventX
+# DASHBOARD_AP_DEV=/dev/ap3216c
+# DASHBOARD_ICM_IIO_NAME=icm20608
+# DASHBOARD_IFACE=eth0
+# DASHBOARD_LED_NAME=alientek-led0
+# DASHBOARD_BEEP_NAME=beep
+# DASHBOARD_HOME_MS=1000
+# DASHBOARD_DETAIL_MS=500
+# QT_QPA_PLATFORM=linuxfb:fb=/dev/fb0
+# QT_QPA_FONTDIR=/usr/share/fonts
+# QT_FONT_DPI=72

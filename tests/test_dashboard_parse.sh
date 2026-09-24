@@ -2,13 +2,14 @@
 # 宿主编译：AP 文本 parse + iioIcmConvert
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
-src="$root/meta-alientek/recipes-apps/sensor-dashboard/files/src"
+src="$root/meta-alientek/recipes-apps/board-ui/dashboard/files/src"
+sensors="$src/hw/sensors"
 common="$root/meta-alientek/recipes-apps/common"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 cat >"$tmp/test_parse.cpp" <<'EOF'
-#define SENSOR_DASHBOARD_TEST_PARSE 1
+#define DASHBOARD_TEST_PARSE 1
 #include "sensors.cpp"
 #include <cstdio>
 #include <cstdlib>
@@ -32,6 +33,6 @@ int main()
 }
 EOF
 
-g++ -std=c++17 -Wall -Wextra -I"$src" -o "$tmp/t" "$tmp/test_parse.cpp"
+g++ -std=c++17 -Wall -Wextra -I"$sensors" -I"$common" -o "$tmp/t" "$tmp/test_parse.cpp"
 "$tmp/t"
 "$root/tests/test_iio_icm_convert.sh"
