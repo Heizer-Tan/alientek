@@ -15,32 +15,15 @@ requireFile() {
 }
 
 parseArgs() {
-    autoReboot="0"
-
-    case "$#" in
-        1)
-            swuPath="$1"
-            ;;
-        2)
-            if [ "$1" != "--reboot" ]; then
-                printf '未知参数: %s\n' "$1" >&2
-                exit 1
-            fi
-            autoReboot="1"
-            swuPath="$2"
-            ;;
-        *)
-            printf '用法: %s [--reboot] <update.swu>\n' "$0" >&2
-            exit 1
-            ;;
-    esac
+    if [ "$#" -ne 1 ]; then
+        printf '用法: %s <update.swu>\n' "$0" >&2
+        exit 1
+    fi
+    swuPath="$1"
 }
 
-performRebootIfRequested() {
-    if [ "${autoReboot}" != "1" ]; then
-        return 0
-    fi
-
+# 升级成功后必须重启，才能按新 active_slot 切槽
+autoReboot() {
     printf '即将自动重启以切换到新槽位\n' >&2
     sync
     reboot
@@ -69,7 +52,7 @@ main() {
     /usr/bin/fw_setenv upgrade_available 1
     /usr/bin/fw_setenv bootcount 0
     printf '升级完成，已切换活动槽位到 %s\n' "${targetSlot}" >&2
-    performRebootIfRequested
+    autoReboot
 }
 
 main "$@"

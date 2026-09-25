@@ -111,8 +111,7 @@ test ! -f "${tempDir}/ota-agent.lock" || \
 runAgent 0 >"${tempDir}/normal.out" 2>"${tempDir}/normal.err"
 cmp "${tempDir}/package.swu" "${tempDir}/downloaded.swu"
 grep -qx 'https://updates.example.test/package.swu' "${tempDir}/curl.log"
-test "$(sed -n '1p' "${tempDir}/upgrade.log")" = "--reboot"
-test "$(sed -n '2p' "${tempDir}/upgrade.log")" = "${tempDir}/downloaded.swu"
+test "$(sed -n '1p' "${tempDir}/upgrade.log")" = "${tempDir}/downloaded.swu"
 if ! grep -Eq '"autoReboot":[[:space:]]*1' "${tempDir}/state.json"; then
     echo "错误：自动重启选项未写入 OTA 状态" >&2
     exit 1

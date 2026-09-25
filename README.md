@@ -166,17 +166,16 @@ sudo bmaptool copy alientek-image-base-imx6ull-alientek-alpha.rootfs.wic.gz /dev
 
 ```bash
 board-apply-update /tmp/alientek-image-update-imx6ull-alientek-alpha.swu
-reboot
 ```
 
-`board-apply-update` 会读取当前 `active_slot`，自动选择 `stable,slotA` 或 `stable,slotB`，始终写入非活动 rootfs 槽。
+`board-apply-update` 会读取当前 `active_slot`，自动选择 `stable,slotA` 或 `stable,slotB`，始终写入非活动 rootfs 槽；成功后自动重启以切槽。
 
 ### 板端 Web 升级
 
 浏览器打开 `http://<板子IP>:8080/`，在「固件升级」区选择 `.swu` 后上传。服务端调用 `board-apply-update` 自动选非活动槽并切环境，成功后自动重启。无口令，仅建议在实验室可信局域网使用。CLI 升级仍可用：
 
 ```bash
-board-apply-update --reboot /tmp/xxx.swu
+board-apply-update /tmp/xxx.swu
 ```
 
 ### 首启确认与回滚
