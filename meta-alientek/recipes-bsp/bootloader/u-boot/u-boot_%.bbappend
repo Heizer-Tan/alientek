@@ -1,4 +1,4 @@
-FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:${THISDIR}/../device-tree/alientek-aes:"
+FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:${THISDIR}/../../device-tree/alientek-aes:"
 
 SRC_URI += " \
     file://mx6ull_aes_defconfig \

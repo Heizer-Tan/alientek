@@ -62,10 +62,10 @@ fi
 need "meta-alientek/recipes-kernel/linux/linux_7.2.bb"
 need "meta-alientek/recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dts"
 need "meta-alientek/recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dtsi"
-need "meta-alientek/recipes-bsp/u-boot/u-boot_2025.04.bb"
-need "meta-alientek/recipes-bsp/u-boot/u-boot_%.bbappend"
-need "meta-alientek/recipes-bsp/u-boot/u-boot/boot.cmd"
-need "meta-alientek/recipes-bsp/u-boot/u-boot/mx6ull_aes_defconfig"
+need "meta-alientek/recipes-bsp/bootloader/u-boot/u-boot_2025.04.bb"
+need "meta-alientek/recipes-bsp/bootloader/u-boot/u-boot_%.bbappend"
+need "meta-alientek/recipes-bsp/bootloader/u-boot/u-boot/boot.cmd"
+need "meta-alientek/recipes-bsp/bootloader/u-boot/u-boot/mx6ull_aes_defconfig"
 need "meta-alientek/recipes-kernel/linux/linux/board.cfg"
 
 aes="$root/meta-alientek/recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dtsi"
@@ -92,7 +92,7 @@ if [[ -f "$aes_dts" ]]; then
   grep -q 'sim2' "$aes_dts" && fail "aes dts 仍引用 sim2"
 fi
 
-cmd="$root/meta-alientek/recipes-bsp/u-boot/u-boot/boot.cmd"
+cmd="$root/meta-alientek/recipes-bsp/bootloader/u-boot/u-boot/boot.cmd"
 if [[ -f "$cmd" ]]; then
   grep -q "nfsroot" "$cmd" || fail "boot.cmd 缺少 nfsroot"
   grep -q "ttymxc0" "$cmd" || fail "boot.cmd 控制台不是 ttymxc0"
@@ -104,7 +104,7 @@ if [[ -f "$cmd" ]]; then
   grep -q '^run mmcboot$' "$cmd" || fail "boot.cmd 末尾未执行 run mmcboot"
 fi
 
-defcfg="$root/meta-alientek/recipes-bsp/u-boot/u-boot/mx6ull_aes_defconfig"
+defcfg="$root/meta-alientek/recipes-bsp/bootloader/u-boot/u-boot/mx6ull_aes_defconfig"
 if [[ -f "$defcfg" ]]; then
   grep -q 'CONFIG_DEFAULT_DEVICE_TREE="imx6ull-alientek-alpha"' "$defcfg" \
     || fail "U-Boot defconfig 未锁定板级 DEFAULT_DEVICE_TREE"
@@ -123,7 +123,7 @@ if [[ "${FULL:-1}" == "1" ]]; then
   need "meta-alientek/conf/machine/imx6ull-alientek-alpha.conf"
   need "meta-alientek/recipes-core/images/alientek-image-base.bb"
   need "meta-alientek/recipes-kernel/linux/linux_7.2.bb"
-  need "meta-alientek/recipes-bsp/u-boot/u-boot_%.bbappend"
+  need "meta-alientek/recipes-bsp/bootloader/u-boot/u-boot_%.bbappend"
   need "scripts/build.sh"
   need "scripts/kas-env.sh"
   need "scripts/kernel-menuconfig.sh"

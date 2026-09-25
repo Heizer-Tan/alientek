@@ -2,8 +2,8 @@
 set -eu
 
 repo_root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
-defconfig="${repo_root}/meta-alientek/recipes-bsp/u-boot/u-boot/mx6ull_aes_defconfig"
-bootcmd="${repo_root}/meta-alientek/recipes-bsp/u-boot/u-boot/boot.cmd"
+defconfig="${repo_root}/meta-alientek/recipes-bsp/bootloader/u-boot/u-boot/mx6ull_aes_defconfig"
+bootcmd="${repo_root}/meta-alientek/recipes-bsp/bootloader/u-boot/u-boot/boot.cmd"
 
 grep -Fqx 'CONFIG_CMD_BOOTMENU=y' "${defconfig}"
 grep -Fqx 'CONFIG_CMD_PART=y' "${defconfig}"

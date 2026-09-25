@@ -2,7 +2,7 @@
 set -eu
 
 repo_root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
-recipe="${repo_root}/meta-alientek/recipes-kernel/ap3216c/ap3216c-module_1.0.bb"
+recipe="${repo_root}/meta-alientek/recipes-kernel/modules/ap3216c/ap3216c-module_1.0.bb"
 
 if ! grep -Fqx 'S = "${WORKDIR}/src"' "${recipe}"; then
     echo 'expected ap3216c-module recipe to read sources from ${WORKDIR}/src' >&2
