@@ -352,10 +352,10 @@ mosquitto_pub -h 127.0.0.1 -t 'device/ota/command' -m \
 
 相关源码：
 
-- `meta-alientek/recipes-core/mqtt-agent/files/src/mqtt-agent.cpp`  
-- `meta-alientek/recipes-core/ota-agent/files/src/ota-mqtt.cpp`（paho / stub）  
-- `meta-alientek/recipes-core/ota-agent/files/src/ota-agent.cpp`（恢复 / `--mqtt-command` / `--apply`）  
-- `meta-alientek/recipes-core/mqtt-agent/mqtt-agent_1.0.bb`（`OTA_MQTT_BACKEND=paho`）
+- `meta-alientek/recipes-core/ota/mqtt-agent/files/src/mqtt-agent.cpp`  
+- `meta-alientek/recipes-core/ota/ota-agent/files/src/ota-mqtt.cpp`（paho / stub）  
+- `meta-alientek/recipes-core/ota/ota-agent/files/src/ota-agent.cpp`（恢复 / `--mqtt-command` / `--apply`）  
+- `meta-alientek/recipes-core/ota/mqtt-agent/mqtt-agent_1.0.bb`（`OTA_MQTT_BACKEND=paho`）
 
 ---
 

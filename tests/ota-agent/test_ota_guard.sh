@@ -2,7 +2,7 @@
 set -eu
 
 projectRoot="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-sourceDir="${projectRoot}/meta-alientek/recipes-core/ota-agent/files/src"
+sourceDir="${projectRoot}/meta-alientek/recipes-core/ota/ota-agent/files/src"
 tempDir="$(mktemp -d)"
 mockBin="${tempDir}/bin"
 agentBinary="${sourceDir}/ota-agent"

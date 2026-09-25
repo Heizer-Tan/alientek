@@ -2,9 +2,9 @@
 set -eu
 
 projectRoot="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-sourceDir="${projectRoot}/meta-alientek/recipes-core/mqtt-agent/files/src"
-otaSrc="${projectRoot}/meta-alientek/recipes-core/ota-agent/files/src"
-initScript="${projectRoot}/meta-alientek/recipes-core/mqtt-agent/files/mqtt-agent.init"
+sourceDir="${projectRoot}/meta-alientek/recipes-core/ota/mqtt-agent/files/src"
+otaSrc="${projectRoot}/meta-alientek/recipes-core/ota/ota-agent/files/src"
+initScript="${projectRoot}/meta-alientek/recipes-core/ota/mqtt-agent/files/mqtt-agent.init"
 tempDir="$(mktemp -d)"
 pidFile="${tempDir}/mqtt-agent.pid"
 agentBinary="${tempDir}/mqtt-agent"

@@ -68,7 +68,7 @@ BOARD_UPGRADE_HEALTH_CMD=${tmpdir}/sbin/board-upgrade-healthcheck
 BOARD_UPGRADE_ROLLBACK_ON_FAIL=1
 EOF
 
-cp "${repo_root}/meta-alientek/recipes-core/board-update-tools/files/board-upgrade-commit.init" \
+cp "${repo_root}/meta-alientek/recipes-core/ota/board-update-tools/files/board-upgrade-commit.init" \
     "${tmpdir}/board-upgrade-commit"
 # 替换 defaults 路径注入
 sed -i "s|/etc/default/board-upgrade-commit|${tmpdir}/etc/default/board-upgrade-commit|" \
@@ -130,7 +130,7 @@ test ! -f "${reboot_flag}" || {
 }
 
 # 槽位库：PARTUUID 识别
-cp "${repo_root}/meta-alientek/recipes-core/board-update-tools/files/board-slot-lib.sh" \
+cp "${repo_root}/meta-alientek/recipes-core/ota/board-update-tools/files/board-slot-lib.sh" \
     "${tmpdir}/share/board-slot-lib.sh"
 cat > "${tmpdir}/cmdline" <<'EOF'
 console=ttymxc0,115200 root=PARTUUID=deadbeef-03 rootwait rw
