@@ -2,7 +2,6 @@
 
 当前板级默认：主线 **U-Boot 2026.07** + **Linux 7.2.4**，设备树 `imx6ull-alientek-alpha.dtb`（`PREFERRED_PROVIDER` 为 `u-boot` / `linux`）。
 
-
 第一期：主线 `linux (7.2.4)` + `u-boot (2026.07)`，TF 卡启动，双网口（AES DT：KSZ8081），NFS 根文件系统。
 
 ## 目录说明
@@ -12,20 +11,9 @@
 | `meta-alientek/` | 板级层（机器、U-Boot/Linux、AES 设备树、镜像） |
 | `kas/` | kas 配置（层分支、provider、local.conf 片段） |
 | `scripts/` | 构建 / NFS 导出 / 骨架检查 |
-| `docs/` | 设计与计划文档（含历史归档） |
+| `guide/` | 入库的操作手册（编译、烧写、OTA、板端演示等） |
+| `docs/` | 本地设计/计划文档（**gitignore，不入库**） |
 | `poky/`、`meta-freescale/`、`meta-openembedded/` | **kas 检出的上游层**，勿当板级资产提交 |
-
-构建入口：`./scripts/build.sh` → `kas-container` + `kas/alientek-alpha.yml`。升级功能额外引入 `meta-swupdate`。
-
-进入交互式 bitbake 环境：
-
-```bash
-./scripts/kas-shell.sh
-# 或单次命令：
-./scripts/kas-shell.sh -c 'bitbake -c cleansstate python3'
-```
-
-当前板级功能总览见 `docs/board-function-overview.md`，SWUpdate 板端升级/回滚实测步骤见 `docs/swu-upgrade-validation.md`。
 
 ## 依赖
 
@@ -39,308 +27,35 @@
 ./scripts/check-bsp-skeleton.sh
 ```
 
-## 编译
+## 快速编译
 
 ```bash
-# 只检出层并下载源码，不编译（源码进 downloads/）
-./scripts/build.sh --fetch-only
-
-# 编译完整镜像（未改动的包走 sstate-cache/，源码包走 downloads/）
-./scripts/build.sh
-
-# 只改了设备树时：自动检测并只编 DTB（不编 linux/u-boot），有 /tftp 会顺带拷过去
-./scripts/build.sh
-# 强制完整构建：./scripts/build.sh --full
-# 指定 TFTP：./scripts/build.sh --tftp /tftp
-
-# 只编某个 recipe（例如改了 key-monitor 后）
-./scripts/build.sh key-monitor
-# 或：./scripts/build.sh --target key-monitor
+./scripts/build.sh --fetch-only   # 只下载
+./scripts/build.sh                # 编完整镜像（默认 alientek-image-update）
+./scripts/build.sh --full         # 强制完整构建
+./scripts/build.sh key-monitor    # 只编某个 recipe
+./scripts/kas-shell.sh            # 交互式 bitbake 环境
 ```
 
-`downloads/` 在仓库根（与 `build/` 分离）；`sstate-cache` 在 `build/sstate-cache/`。若曾把 `DL_DIR` 指到空目录导致重下失败，把旧的 `build/downloads` 迁到仓库根 `downloads/` 即可。
-国内访问 `ghcr.io` 常 TLS 超时。`build.sh` 会改拉南大 `ghcr.nju.edu.cn/siemens/kas/kas:5.5`，成功后打成官方标签。
-
-**不要用 `ghcr.1ms.run` 拉 kas:5.5**：该源曾把最大一层（约 232MB）下完但校验失败（`unexpected commit digest`）。若已经踩过，先清坏层再换源：
-
-```bash
-docker builder prune -af
-docker image rm -f ghcr.1ms.run/siemens/kas/kas:5.5 2>/dev/null || true
-echo '210.28.130.20 ghcr.nju.edu.cn' | sudo tee -a /etc/hosts
-docker pull ghcr.nju.edu.cn/siemens/kas/kas:5.5
-docker tag ghcr.nju.edu.cn/siemens/kas/kas:5.5 ghcr.io/siemens/kas/kas:5.5
-./scripts/build.sh
-```
-
-若南大也报 `unexpected commit digest sha256:cd581334…`：这是本地 containerd 里第一次从毫秒源写入的坏层，`docker builder prune` 清不掉。先清缓存再拉：
-
-```bash
-sudo ./scripts/purge-kas-docker-cache.sh
-docker pull ghcr.nju.edu.cn/siemens/kas/kas:5.5
-docker tag ghcr.nju.edu.cn/siemens/kas/kas:5.5 ghcr.io/siemens/kas/kas:5.5
-./scripts/build.sh
-```
-
-仍失败可暂时绕过镜像（WSL 上有 pseudo 风险）：
-
-```bash
-KAS_USE_HOST=1 ./scripts/build.sh
-```
-
-默认目标为 `alientek-image-update`（`kas/alientek-alpha.yml` 与 `./scripts/build.sh` 一致）：产物在 `build/tmp/deploy/images/imx6ull-alientek-alpha/`，含 `u-boot.imx`、`zImage`、`imx6ull-alientek-alpha.dtb`、`alientek-image-base-*.rootfs.wic`（update 依赖 base）以及单文件升级包 `*.swu`。仅要 rootfs/wic 时可显式指定：`./scripts/build.sh alientek-image-base`。
-
-上游层固定 **scarthgap**（见 `kas/alientek-alpha.yml`）；三层分支须一致，不要混用。
-
-## U-Boot Recipe 结构
-
-当前 U-Boot 配方按“版本层 + 公共层 + 角色层 + 板级层”拆分，后续升级主线版本时尽量只增量改动：
-
-- `meta-alientek/recipes-bsp/bootloader/u-boot/u-boot-source-<ver>.inc`：只放版本号、tarball 地址、sha256、源码目录
-- `meta-alientek/recipes-bsp/bootloader/u-boot/u-boot-alientek-common.inc`：放跨版本共用逻辑，例如公共依赖、构建目录、release tarball 补 `.git`
-- `meta-alientek/recipes-bsp/bootloader/u-boot/u-boot-target-alientek.inc`：放目标 U-Boot 的公共配置
-- `meta-alientek/recipes-bsp/bootloader/u-boot/u-boot-tools-alientek.inc`：放 `u-boot-tools` 共用兼容逻辑
-- `meta-alientek/recipes-bsp/bootloader/u-boot/u-boot_<ver>.bb`、`u-boot-tools_<ver>.bb`：仅负责组合上述层
-- `meta-alientek/recipes-bsp/bootloader/u-boot/u-boot_%.bbappend`：只负责阿尔法板 `defconfig`、DTS 和默认 `fdt_file` 注入
-
-后续如果升级到新的主线版本，通常流程是：
-
-```bash
-# 1. 新增版本层
-meta-alientek/recipes-bsp/bootloader/u-boot/u-boot-source-2027.xx.inc
-
-# 2. 新增薄入口
-meta-alientek/recipes-bsp/bootloader/u-boot/u-boot_2027.xx.bb
-meta-alientek/recipes-bsp/bootloader/u-boot/u-boot-tools_2027.xx.bb
-
-# 3. 更新版本选择
-kas/alientek-alpha.yml
-```
-
-若上游行为有变化，优先修改 `u-boot-target-alientek.inc` 或 `u-boot-tools-alientek.inc`，尽量不要把兼容逻辑重新散回各个版本文件。
-
-## 烧写 TF 卡（mmcboot）
-
-确认设备节点后：
-
-```bash
-sudo bmaptool copy alientek-image-base-imx6ull-alientek-alpha.rootfs.wic.gz /dev/sdX
-# 或：sudo dd if=alientek-image-base-imx6ull-alientek-alpha.rootfs.wic of=/dev/sdX bs=4M conv=fsync
-```
-
-拨码选择 SD 启动，串口 115200。U-Boot 执行 `run mmcboot`。若找不到系统分区，在 U-Boot 里 `mmc list` 后 `setenv mmcdev 0` 再 `run mmcboot`。
-
-## 单一升级包（SWUpdate + A/B）
-
-当前量产升级链路采用：
-
-- 一个共享 `boot` FAT 分区，保存 `zImage`、`imx6ull-alientek-alpha.dtb`、`boot.scr`
-- 两个 ext4 根文件系统槽位：`rootfsA`、`rootfsB`
-- U-Boot 环境变量 `active_slot`、`upgrade_available`、`bootcount`
-- Linux 用户态通过 `swupdate` 写入“非活动槽位”，首启成功后由 `board-upgrade-commit` 提交新槽
-
-默认分区布局见 `meta-alientek/wic/imx6ull-alientek-ab.wks.in`：
-
-- `u-boot`：原始写入 TF 卡前部
-- `boot`：FAT，共享启动文件
-- `rootfsA`：当前槽位或候选槽位
-- `rootfsB`：当前槽位或候选槽位
-
-### 构建 `.swu`
-
-```bash
-./scripts/build.sh alientek-image-update
-```
-
-生成物位于 `build/tmp/deploy/images/imx6ull-alientek-alpha/`，包含：
-
-- `alientek-image-update-imx6ull-alientek-alpha.swu`
-- `alientek-image-base-imx6ull-alientek-alpha.rootfs.ext4.gz`
-- `u-boot.imx`
-- `zImage`
-- `imx6ull-alientek-alpha.dtb`
-- `boot.scr`
-
-### 板端执行升级
-
-将 `.swu` 拷到板子后执行：
-
-```bash
-board-apply-update /tmp/alientek-image-update-imx6ull-alientek-alpha.swu
-```
-
-`board-apply-update` 会读取当前 `active_slot`，自动选择 `stable,slotA` 或 `stable,slotB`，始终写入非活动 rootfs 槽；成功后自动重启以切槽。
-
-### 板端 Web 升级
-
-浏览器打开 `http://<板子IP>:8080/`，在「固件升级」区选择 `.swu` 后上传。服务端调用 `board-apply-update` 自动选非活动槽并切环境，成功后自动重启。无口令，仅建议在实验室可信局域网使用。CLI 升级仍可用：
-
-```bash
-board-apply-update /tmp/xxx.swu
-```
-
-### 首启确认与回滚
-
-- 升级阶段会把 `upgrade_available=1` 并切换 `active_slot`
-- U-Boot 启用 `bootcount` / `bootlimit=3`
-- 若连续启动失败超过限制，`altbootcmd` 会把槽位切回上一个分区
-- 新系统正常启动后，`/etc/init.d/board-upgrade-commit` 会清除 `upgrade_available` 并把 `bootcount` 归零
-- 板端实测步骤见 `docs/swu-upgrade-validation.md`
-
-可在板上查看状态：
-
-```bash
-fw_printenv active_slot
-fw_printenv upgrade_available
-fw_printenv bootcount
-```
-
-当前板级 `boot.scr` 会按 `active_slot` 选择根分区：优先使用 U-Boot 环境中的 `rootfs_a_partuuid` / `rootfs_b_partuuid`（`part uuid mmc 0:2/3`，需 `CONFIG_CMD_PART`），未缓存时回退 `/dev/mmcblk0p2` 与 `/dev/mmcblk0p3`。
-
-## MQTT OTA
-
-零基础验证步骤见：`tests/ota-agent/MQTT-VERIFICATION.md`。
-
-板端拆成两个进程：
-
-- **`mqtt-agent`**（常驻）：用 `paho-mqtt-c` 连接/探测 broker、心跳、订阅 `device/ota/command`；收到命令后 `exec`/`popen` `ota-agent --mqtt-command`，并把 stdout 状态 JSON 再发布到 `device/ota/status`。
-- **`ota-agent`**（短命）：无参只做 A/B 恢复后退出；`--mqtt-command` / `--apply` 跑下载校验与 `board-apply-update`。不再常驻 MQTT。
-
-配置：`/etc/default/mqtt-agent`（`OTA_MQTT_HOST=auto` 可扫 eth0 网段 `1883`）、`/etc/default/ota-agent`（状态路径等）。启停：`/etc/init.d/mqtt-agent`。宿主测试默认 stub，可不装 paho。
-
-## 按键演示（key-monitor）
-
-串口登录后：`key-monitor`（自动找 `gpio-keys`），按 KEY0 会打印 `type=1 code=28 value=1/0`。可选自启：`update-rc.d key-monitor defaults && /etc/init.d/key-monitor start`（写 syslog）。
-
-## 触摸演示（touch-monitor）
-
-对应设备树 `gt9147@5d`（Goodix，INT=`GPIO1_IO09`）。串口登录后：
-
-```bash
-# 原始事件流 + 每帧摘要
-touch-monitor
-# 仅摘要（手指移动时持续刷 x/y）
-touch-monitor -S
-# 指定设备
-touch-monitor -d /dev/input/event2
-cat /proc/bus/input/devices   # 确认 Goodix 节点
-```
-
-需内核含 `CONFIG_TOUCHSCREEN_GOODIX`（见 `recipes-kernel/linux/linux/touch.cfg`），且电阻屏 `&tsc` 已关闭以免抢 INT 脚。
-
-## AP3216C 演示
-
-设备树节点挂在 `i2c1@0x1e`，镜像内包含 `i2c-tools`、`ap3216c-module` 与 `ap3216c-read`。可先用 `i2cdetect` / `i2cget` / `i2cdump` 排查总线，再读取驱动导出的数据：
-
-```bash
-i2cdetect -y 0
-ap3216c-read
-ap3216c-read -w
-# 示例：ir=12 als=345 ps=28
-```
-
-若手靠近传感器，`ps` 应上升；遮光/打光时，`als` 应变化。
-
-## ICM20608 演示
-
-设备树节点挂在 `ecspi3` CS0（`compatible = "alientek,icm20608"`）。驱动为 **IIO sysfs**（不再提供 `/dev/icm20608`），镜像含 `icm20608-module` 与 `icm20608-read`：
-
-```bash
-lsmod | grep icm20608
-# 确认 IIO 设备（name=icm20608）
-grep -H . /sys/bus/iio/devices/iio:device*/name
-# 可选：直接读 raw/scale
-# cat /sys/bus/iio/devices/iio:deviceX/in_accel_z_raw
-icm20608-read
-icm20608-read -w
-# 示例：ax=... ay=... az=... gx=... gy=... gz=... temp_raw=... ax_g=... ay_g=... az_g=... gx_dps=... gy_dps=... gz_dps=... temp_c=...
-# 环境变量 ICM20608_IIO_NAME 默认 icm20608
-```
-
-静止时 `az_g` 约 ±1g，角速度接近 0。历史数据见下方 Web「六轴」页。`ls /dev/icm20608` 应失败（已硬切掉 misc）。
-
-## LCD 板级控制台
-
-镜像含 `dashboard`（**Qt6 Widgets + linuxfb** `/dev/fb0` + evdev/Goodix 触摸），开机自启。窗口标题为「板级控制台」，主页 **2×3** 入口：
-
-- 光感 AP3216C / 六轴 ICM20608（详情页）
-- 系统信息（IP、运行时间、内存、负载）
-- 灯控（LED 开/关/恢复呼吸灯，蜂鸣器开/关）
-- 按键状态（`user-key`）
-- OTA 只读槽位（`fw_printenv`，升级仍走 Web）
-
-手动：`/etc/init.d/dashboard start|stop`  
-可选环境变量见 `/etc/default/dashboard`（如 `DASHBOARD_IFACE`、`DASHBOARD_LED_NAME`、`QT_QPA_PLATFORM`）。
-
-需确认 `ls -l /dev/fb0`，触摸为 Goodix event 节点。
-
-## 传感器入库与 Web 查询
-
-- 光感采集：`ap3216c-logger` 每 5 分钟写入 `/var/lib/ap3216c/ap3216c.db`，保留 7 天
-- 六轴采集：`icm20608-logger` 默认每 5 秒写入 `/var/lib/icm20608/icm20608.db`，保留 7 天
-- 查询：浏览器打开 `http://<板子IP>:8080/`（AP3216C）；六轴页 `http://<板子IP>:8080/icm20608`
-- 固件升级：光感首页「固件升级」上传 `.swu`（自动 A/B，成功后重启）
-- 启停：`/etc/init.d/ap3216c-logger`、`/etc/init.d/icm20608-logger`、`/etc/init.d/webserver`
-- 手动读数：`ap3216c-read`、`icm20608-read`
-
-## 时间同步（NTP）
-
-开机顺序：`busybox-hwclock` 先从板载电池保持的 **SNVS RTC** 恢复时间，再由 `board-ntpdate`（BusyBox `ntpd -q`）对时；关机时 `hwclock` 会把系统时间写回 RTC。默认 NTP 服务器 `ntp.aliyun.com`、`ntp.tencent.com`，在 `ap3216c-logger` 之前执行。
-
-```bash
-ls -l /dev/rtc0
-hwclock -r
-date -u
-/etc/init.d/board-ntpdate start   # 手动再对一次
-hwclock -w                        # 首次校时后写回 RTC
-# 自定义服务器：NTP_SERVERS="cn.pool.ntp.org" /etc/init.d/board-ntpdate start
-```
-
-需板子能访问外网 NTP；失败时启动不中断，仍可依赖 RTC 电池保持大致正确时间。
-
-## 本地启动网络
-
-本地 MMC 启动场景下，镜像默认安装 `board-network`，在开机时为 `eth0`（ENET2 / `fec2@20b4000`）配置静态地址 `192.168.5.201/24`、默认网关 `192.168.5.1`，并写入 DNS `223.5.5.5`、`119.29.29.29`。U-Boot TFTP/NFS 与 Linux 共用该口，实验室网线只插 ENET2。现场可修改 `etc/default/board-network` 后重启或执行 `/etc/init.d/board-network restart` 生效。
-
-## NFS 启动（netboot，调试入口）
-
-1. 编译完成后导出（需有 `*.rootfs.tar.zst`；仅有 `wic.gz` 时先完整编一次镜像）：
-
-```bash
-sudo ./scripts/export-nfs-tftp.sh \
-  --tftp-dir /tftp \
-  --nfs-dir /srv/nfs/nfs_rootfs
-```
-
-（`--deploy-dir` 默认为仓库下 `build/tmp/deploy/images/imx6ull-alientek-alpha`，一般可省略。）
-
-2. `/etc/exports`：
-
-```
-/srv/nfs/nfs_rootfs *(rw,sync,no_root_squash,no_subtree_check)
-```
-
-`sudo exportfs -ra`，并启动 tftpd 与 nfs-server。
-
-3. 板端与 PC 同一网段，网线插 ENET2（`ethernet@20b4000`）。当前 `boot.cmd` 保留 `run netboot` 作为调试入口（静态 IP + eth0，禁止 DHCP），示例：
-
-```
-setenv serverip 192.168.5.27
-setenv ipaddr 192.168.5.201
-setenv gatewayip 192.168.5.1
-setenv netmask 255.255.255.0
-setenv nfsroot /srv/nfs/nfs_rootfs
-run netboot
-```
-
-未更新 `boot.scr` 时，可在 U-Boot 里手动执行上面变量后 `run netboot`。TF 卡可只烧 U-Boot；内核/DTB 走 TFTP，根走 NFS。
-
-## 故障分段
-
-1. U-Boot 无输出：串口设备、波特率、拨码、`dd`/`bmaptool` 是否写对盘
-2. 停在 U-Boot：DRAM 512MB、mmc 设备号
-3. 内核 panic 无根：先 mmc 根，再 nfs 根，对比 `printenv bootargs`
-4. 单网口：KSZ8081 reset（GPIO5_IO7/8）、MDIO 地址 2/1
-5. NFS：板端 ping `serverip` → TFTP 能否取 zImage → export 与 `no_root_squash` → `nfsvers=3`
-
+产物在 `build/tmp/deploy/images/imx6ull-alientek-alpha/`。详细说明、目录缓存与 **kas/Docker 镜像排障** 见 [guide/build.md](guide/build.md)。
+
+## 文档索引
+
+| 文档 | 内容 |
+|------|------|
+| [guide/build.md](guide/build.md) | 编译命令、产物、kas 镜像排障 |
+| [guide/u-boot-recipe.md](guide/u-boot-recipe.md) | U-Boot 配方分层与升版 |
+| [guide/flash-tf.md](guide/flash-tf.md) | 烧写 TF 卡 / mmcboot |
+| [guide/ota-swupdate.md](guide/ota-swupdate.md) | SWUpdate A/B、Web 升级、回滚 |
+| [guide/mqtt-ota.md](guide/mqtt-ota.md) | MQTT OTA 双进程与配置 |
+| [guide/board-apps.md](guide/board-apps.md) | 按键/触摸/光感/六轴/dashboard/Web |
+| [guide/network-ntp.md](guide/network-ntp.md) | NTP 与板载静态网络 |
+| [guide/nfs.md](guide/nfs.md) | NFS/TFTP 调试启动 |
+| [guide/troubleshooting.md](guide/troubleshooting.md) | 故障分段速查 |
+
+MQTT 零基础验证：`tests/ota-agent/MQTT-VERIFICATION.md`。  
+AP3216C 驱动链路：`meta-alientek/recipes-kernel/modules/ap3216c/AP3216C-DEVICE-PATH.md`。
+
+---
 
 在此感谢 [imx-forge](https://github.com/Awesome-Embedded-Learning-Studio/imx-forge) 项目为本项目设备树设计提供的宝贵参考。
