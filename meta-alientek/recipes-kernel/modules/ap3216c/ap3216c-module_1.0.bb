@@ -1,12 +1,15 @@
 SUMMARY = "AP3216C I2C misc driver"
 DESCRIPTION = "为阿尔法板 AP3216C 导出 /dev/ap3216c"
 LICENSE = "GPL-2.0-only"
-LIC_FILES_CHKSUM = "file://ap3216c.c;beginline=1;endline=1;md5=a9f1449b768f69dcffc44cb5e556b102"
+LIC_FILES_CHKSUM = "file://ap3216c.h;beginline=1;endline=1;md5=a9f1449b768f69dcffc44cb5e556b102"
 
 inherit module
 
 SRC_URI = " \
-    file://ap3216c.c;subdir=src \
+    file://ap3216c.h;subdir=src \
+    file://ap3216c-i2c.c;subdir=src \
+    file://ap3216c-hw.c;subdir=src \
+    file://ap3216c-misc.c;subdir=src \
     file://Makefile;subdir=src \
 "
 

@@ -14,14 +14,11 @@ if ! grep -Fqx 'B = "${S}"' "${recipe}"; then
     exit 1
 fi
 
-if ! grep -Fq 'file://ap3216c.c;subdir=src' "${recipe}"; then
-    echo 'expected ap3216c.c to unpack into src subdir' >&2
-    exit 1
-fi
-
-if ! grep -Fq 'file://Makefile;subdir=src' "${recipe}"; then
-    echo 'expected Makefile to unpack into src subdir' >&2
-    exit 1
-fi
+for f in ap3216c.h ap3216c-i2c.c ap3216c-hw.c ap3216c-misc.c Makefile; do
+    if ! grep -Fq "file://${f};subdir=src" "${recipe}"; then
+        echo "expected ${f} to unpack into src subdir" >&2
+        exit 1
+    fi
+done
 
 echo 'ap3216c-module recipe binds S/B to WORKDIR/src'
