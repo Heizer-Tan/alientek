@@ -1,6 +1,7 @@
 #include "ota-agent.hpp"
 
 #include "ota-defaults.hpp"
+#include "ota-discover.hpp"
 #include "ota-download.hpp"
 #include "ota-exec.hpp"
 #include "ota-mqtt.hpp"
@@ -73,6 +74,119 @@ static int executeApplyPipeline(const char *url, const char *sha256,
         return -1;
     }
     return otaRunUpgrade(swuPath, autoReboot, errorBuf, errorBufSize);
+}
+
+/* 实验室拉取：无远端 sha256，下载后直接刷写；stdout 输出 OTA_PROGRESS 供 UI */
+static int g_pullProgressHighWater;
+
+static void emitOtaProgress(int percent, const char *stage)
+{
+	if (percent < 0)
+		percent = 0;
+	if (percent > 100)
+		percent = 100;
+	/* 整次 pull-latest 过程单调不减，避免 UI 回跳 */
+	if (percent < g_pullProgressHighWater)
+		percent = g_pullProgressHighWater;
+	g_pullProgressHighWater = percent;
+	printf("OTA_PROGRESS %d %s\n", percent, stage != NULL ? stage : "");
+	fflush(stdout);
+}
+
+static void onPullDownloadProgress(int curlPct, void *userData)
+{
+	int mapped;
+
+	(void)userData;
+	/* 下载映射到整体进度 10%..90% */
+	mapped = 10 + (curlPct * 80) / 100;
+	emitOtaProgress(mapped, "downloading");
+}
+
+static int executePullLatestPipeline(const char *url, const char *swuPath,
+				     const char *statePath, OtaState *state,
+				     char *errorBuf, size_t errorBufSize)
+{
+	if (otaCheckUpgradeAllowed(errorBuf, errorBufSize) != 0 ||
+	    otaPrepareTargetSlot(state, errorBuf, errorBufSize) != 0 ||
+	    savePhase(statePath, state, "downloading", errorBuf,
+		      errorBufSize) != 0) {
+		return -1;
+	}
+	emitOtaProgress(10, "downloading");
+	if (otaDownloadPackageWithProgress(url, swuPath, onPullDownloadProgress,
+					   NULL, errorBuf, errorBufSize) != 0 ||
+	    savePhase(statePath, state, "upgrading", errorBuf,
+		      errorBufSize) != 0) {
+		return -1;
+	}
+	emitOtaProgress(95, "upgrading");
+	if (otaRunUpgrade(swuPath, 1, errorBuf, errorBufSize) != 0)
+		return -1;
+	emitOtaProgress(100, "done");
+	return 0;
+}
+
+static int otaAgentRunPullLatest(int argc, char **argv)
+{
+	const char *lockPath = otaReadPathSetting(
+		"OTA_AGENT_LOCK_FILE", "/var/run/ota-agent.lock");
+	const char *statePath = otaReadPathSetting(
+		"OTA_AGENT_STATE_FILE", "/var/lib/ota-agent/state.json");
+	const char *swuPath = otaReadPathSetting(
+		"OTA_DOWNLOAD_PATH", "/var/tmp/ota-download.swu");
+	const char *baseUrl;
+	char url[512];
+	char name[256];
+	char errorBuf[256];
+	OtaState state;
+	int lockFd;
+	int result;
+
+	if (argc != 2 && argc != 3) {
+		fprintf(stderr,
+			"用法: %s --pull-latest [固件目录URL]\n"
+			"默认目录: OTA_FIRMWARE_BASE 或 http://192.168.5.13:8000\n",
+			argv[0]);
+		return 2;
+	}
+	baseUrl = (argc == 3) ? argv[2]
+			      : otaReadPathSetting("OTA_FIRMWARE_BASE",
+						   "http://192.168.5.13:8000");
+	g_pullProgressHighWater = 0;
+	emitOtaProgress(3, "resolving");
+	if (otaResolveLatestSwuUrl(baseUrl, url, sizeof(url), name, sizeof(name),
+				   errorBuf, sizeof(errorBuf)) != 0) {
+		fprintf(stderr, "ota-agent pull-latest: %s\n", errorBuf);
+		return 1;
+	}
+	fprintf(stderr, "选中固件: %s\nURL: %s\n", name, url);
+	emitOtaProgress(8, "resolved");
+	if (getenv("OTA_PULL_DRY_RUN") != NULL) {
+		printf("%s\n", url);
+		return 0;
+	}
+	lockFd = otaStateAcquireLock(lockPath);
+	if (lockFd < 0) {
+		fprintf(stderr, "ota-agent busy\n");
+		return 1;
+	}
+	result = loadStateForApply(statePath, &state, errorBuf, sizeof(errorBuf));
+	if (result == 0) {
+		(void)snprintf(state.requestId, sizeof(state.requestId),
+			       "pull-latest");
+		(void)snprintf(state.detail, sizeof(state.detail), "%s", name);
+		state.autoReboot = 1;
+		result = executePullLatestPipeline(url, swuPath, statePath,
+						   &state, errorBuf,
+						   sizeof(errorBuf));
+	}
+	otaStateReleaseLock(lockFd, lockPath);
+	if (result != 0) {
+		fprintf(stderr, "ota-agent pull-latest failed: %s\n", errorBuf);
+		return 1;
+	}
+	return 0;
 }
 
 static int otaAgentRunApply(int argc, char **argv)
@@ -441,7 +555,12 @@ int main(int argc, char **argv)
         if (strcmp(argv[1], "--mqtt-command") == 0) {
             return otaAgentRunMqttCommand(argc, argv);
         }
-        fprintf(stderr, "未知参数: %s\n", argv[1]);
+        if (strcmp(argv[1], "--pull-latest") == 0) {
+            return otaAgentRunPullLatest(argc, argv);
+        }
+        fprintf(stderr,
+                "用法: %s [--apply … | --mqtt-precheck … | --mqtt-command … | --pull-latest [url]]\n",
+                argv[0]);
         return 2;
     }
     return otaAgentRunRecovery();

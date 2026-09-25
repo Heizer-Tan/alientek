@@ -10,6 +10,9 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
+#include <QProcess>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QStackedWidget>
@@ -19,73 +22,87 @@
 
 namespace {
 
-/* 像素风色板：直角、粗边、无圆角、无虚线焦点 */
-constexpr char kBg[] = "#1A1C2C";
-constexpr char kPanel[] = "#262B44";
-constexpr char kPanelHi[] = "#3A4060";
-constexpr char kText[] = "#F4F0E6";
-constexpr char kMuted[] = "#8B9BB4";
-constexpr char kCyan[] = "#5BC0EB";
-constexpr char kGreen[] = "#6BCB63";
-constexpr char kYellow[] = "#F7D51D";
-constexpr char kOrange[] = "#E85A4F";
-constexpr char kInk[] = "#0D0F18";
+/* 复古终端：黑底荧光绿（参考 CRT/console） */
+constexpr char kBg[] = "#000000";
+constexpr char kPanel[] = "#001408";
+constexpr char kPanelHi[] = "#00331a";
+constexpr char kText[] = "#00FF66";
+constexpr char kMuted[] = "#007A3D";
+constexpr char kCyan[] = "#00FF66";
+constexpr char kGreen[] = "#00FF66";
+constexpr char kYellow[] = "#FFCC00";
+constexpr char kOrange[] = "#FF3344";
+constexpr char kInk[] = "#000000";
+constexpr char kWarn[] = "#FF3344";
 
-QString pixelBtnStyle(const char *face)
+QString terminalFont()
 {
-	/* 主页卡片：紧凑 padding，避免 600 高屏被内容最小高度顶爆 */
+	return QStringLiteral(
+		"font-family: \"DejaVu Sans Mono\", \"Liberation Mono\", "
+		"monospace;");
+}
+
+QString pixelBtnStyle(const char * /*face*/)
+{
 	return QStringLiteral(
 		"QPushButton {"
-		"  background-color: %1; color: %2;"
-		"  border: 3px solid %3; border-radius: 0px; outline: none;"
-		"  text-align: left; padding: 4px 8px; font-weight: bold;"
+		"  background-color: %1; color: %2; %3"
+		"  border: 1px solid %2; border-radius: 0px; outline: none;"
+		"  text-align: left; padding: 6px 10px; font-weight: bold;"
 		"}"
-		"QPushButton:focus { outline: none; border: 3px solid %3; }"
+		"QPushButton:focus { outline: none; border: 1px solid %4; }"
 		"QPushButton:pressed {"
-		"  background-color: %4; border: 3px solid %5;"
+		"  background-color: %5; color: %1; border: 1px solid %2;"
 		"}")
-		.arg(QLatin1String(face), QLatin1String(kText),
-		     QLatin1String(kText), QLatin1String(kPanelHi),
-		     QLatin1String(kMuted));
+		.arg(QLatin1String(kPanel), QLatin1String(kText), terminalFont(),
+		     QLatin1String(kYellow), QLatin1String(kText));
 }
 
 QString pixelActionStyle(const char * /*face*/)
 {
 	return QStringLiteral(
 		"QPushButton {"
-		"  background-color: %1; color: %2;"
-		"  border: 3px solid %2; border-radius: 0px; outline: none;"
+		"  background-color: %1; color: %2; %3"
+		"  border: 1px solid %2; border-radius: 0px; outline: none;"
 		"  text-align: center; padding: 10px; font-weight: bold;"
-		"  font-size: 20px;"
+		"  font-size: 18px;"
 		"}"
 		"QPushButton:focus { outline: none; }"
 		"QPushButton:pressed {"
-		"  background-color: %3; color: %4; border: 3px solid %4;"
+		"  background-color: %2; color: %1; border: 1px solid %2;"
 		"}")
-		.arg(QLatin1String(kPanel), QLatin1String(kText),
-		     QLatin1String(kText), QLatin1String(kInk));
+		.arg(QLatin1String(kPanel), QLatin1String(kText), terminalFont());
 }
 
 QString titleStyle(const char *accent)
 {
 	return QStringLiteral(
-		"font-size: 26px; font-weight: 900; color: %1;"
-		" letter-spacing: 2px;")
-		.arg(QLatin1String(accent));
+		"%1 font-size: 22px; font-weight: bold; color: %2;"
+		" letter-spacing: 1px;")
+		.arg(terminalFont(), QLatin1String(accent));
 }
 
 QString monoStyle()
 {
 	return QStringLiteral(
-		"font-size: 22px; font-family: monospace; color: %1;"
-		" background-color: %2; border: 4px double %3; padding: 12px;")
-		.arg(QLatin1String(kText), QLatin1String(kInk),
+		"%1 font-size: 18px; color: %2;"
+		" background-color: %3; border: 1px solid %4; padding: 12px;")
+		.arg(terminalFont(), QLatin1String(kText), QLatin1String(kInk),
 		     QLatin1String(kMuted));
 }
 
 QString fmtUnavailable(const QString &v)
 {
 	return v.isEmpty() ? QString::fromUtf8("N/A") : v;
+}
+
+/* 终端点线对齐：LABEL........VALUE */
+QString padDots(const QString &label, const QString &value, int width = 22)
+{
+	QString left = label;
+	if (left.size() >= width)
+		return left + QStringLiteral(" ") + value;
+	return left + QString(width - left.size(), QLatin1Char('.')) + value;
 }
 
 void noFocus(QPushButton *b)
@@ -97,7 +114,7 @@ void noFocus(QPushButton *b)
 
 QPushButton *makeBackBtn(const char *face)
 {
-	auto *back = new QPushButton(QString::fromUtf8("[ 返回 ]"));
+	auto *back = new QPushButton(QString::fromUtf8("[ BACK ]"));
 	back->setMinimumHeight(64);
 	back->setStyleSheet(pixelActionStyle(face));
 	noFocus(back);
@@ -148,21 +165,23 @@ Dashboard::Dashboard(const QString &apDev, const QString &icmName,
 
 void Dashboard::applyDarkStyle(QWidget *w)
 {
-	/* 点阵底模拟老 LCD；不可用时纯色底仍可读 */
+	/* 纯黑底 + 绿字；细扫描线感用极淡点阵 */
 	w->setStyleSheet(QStringLiteral(
 		"QWidget {"
-		"  background-color: %1; color: %2;"
-		"  background-image: radial-gradient(%3 1px, transparent 1px);"
-		"  background-size: 4px 4px;"
+		"  background-color: %1; color: %2; %3"
+		"  background-image: radial-gradient(%4 1px, transparent 1px);"
+		"  background-size: 3px 3px;"
 		"}"
 		"QLabel { background: transparent; background-image: none; }"
 		"QStackedWidget { background-color: %1;"
-		"  background-image: radial-gradient(%3 1px, transparent 1px);"
-		"  background-size: 4px 4px; }"
+		"  background-image: radial-gradient(%4 1px, transparent 1px);"
+		"  background-size: 3px 3px; }"
 		"QPushButton, QPushButton:focus { outline: none; }"
+		"QMessageBox { background-color: %1; color: %2; }"
+		"QMessageBox QLabel { color: %2; %3 }"
 		"*:focus { outline: none; }")
 				 .arg(QLatin1String(kBg), QLatin1String(kText),
-				      QLatin1String(kPanelHi)));
+				      terminalFont(), QLatin1String(kPanelHi)));
 	w->setFocusPolicy(Qt::NoFocus);
 }
 
@@ -171,7 +190,6 @@ QPushButton *Dashboard::makeHomeCard(const QString &title, QLabel **summaryOut,
 {
 	auto *btn = new QPushButton;
 	noFocus(btn);
-	/* 固定适中高度，不纵向铺满；三行 + HUD 需落在 600 内 */
 	btn->setFixedHeight(150);
 	btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 	btn->setCursor(Qt::PointingHandCursor);
@@ -180,17 +198,16 @@ QPushButton *Dashboard::makeHomeCard(const QString &title, QLabel **summaryOut,
 	col->setContentsMargins(8, 6, 8, 6);
 	col->setSpacing(4);
 
-	auto *tag = new QLabel(QString::fromUtf8("▌") + title);
+	auto *tag = new QLabel(QString::fromUtf8("> ") + title.toUpper());
 	tag->setAttribute(Qt::WA_TransparentForMouseEvents);
-	tag->setStyleSheet(QStringLiteral("font-size: 22px; font-weight: 900; color: %1;")
-				   .arg(QLatin1String(accent)));
+	tag->setStyleSheet(QStringLiteral("%1 font-size: 20px; font-weight: bold; color: %2;")
+				   .arg(terminalFont(), QLatin1String(accent)));
 
-	auto *sum = new QLabel(QString::fromUtf8("..."));
+	auto *sum = new QLabel(QString::fromUtf8("...."));
 	sum->setAttribute(Qt::WA_TransparentForMouseEvents);
 	sum->setWordWrap(false);
-	sum->setStyleSheet(QStringLiteral(
-				   "font-size: 16px; font-family: monospace; color: %1;")
-				   .arg(QLatin1String(kMuted)));
+	sum->setStyleSheet(QStringLiteral("%1 font-size: 16px; color: %2;")
+				   .arg(terminalFont(), QLatin1String(kMuted)));
 
 	col->addWidget(tag);
 	col->addWidget(sum);
@@ -208,34 +225,34 @@ QWidget *Dashboard::buildHomePage()
 	lay->setContentsMargins(12, 8, 12, 8);
 	lay->setSpacing(8);
 
-	/* 单行 HUD */
+	/* 顶栏：终端 HUD */
 	auto *hud = new QWidget;
 	hud->setObjectName(QStringLiteral("hud"));
 	hud->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 	hud->setStyleSheet(QStringLiteral(
 		"QWidget#hud {"
-		"  background-color: %1; color: %2;"
-		"  border: 3px double %3; padding: 4px 8px;"
-		"  font-family: monospace; font-weight: 900; font-size: 16px;"
+		"  background-color: %1; color: %2; %3"
+		"  border: 1px solid %2; padding: 4px 8px;"
+		"  font-weight: bold; font-size: 15px;"
 		"  background-image: none;"
 		"}")
 				   .arg(QLatin1String(kInk), QLatin1String(kText),
-					QLatin1String(kMuted)));
+					terminalFont()));
 
 	auto *hudLay = new QHBoxLayout(hud);
 	hudLay->setContentsMargins(4, 2, 4, 2);
 	hudLay->setSpacing(8);
-	auto *brand = new QLabel(QString::fromUtf8("▓ ALIENTEK"));
-	brand->setStyleSheet(QStringLiteral("color: %1; background: transparent;")
-				     .arg(QLatin1String(kCyan)));
-	auto *ok = new QLabel(QString::fromUtf8("[OK]"));
-	ok->setStyleSheet(QStringLiteral("color: %1; background: transparent;")
-				  .arg(QLatin1String(kGreen)));
+	auto *brand = new QLabel(QString::fromUtf8("ALIENTEK-ALPHA // CONSOLE"));
+	brand->setStyleSheet(QStringLiteral("color: %1; background: transparent; %2")
+				     .arg(QLatin1String(kText), terminalFont()));
+	auto *ok = new QLabel(QString::fromUtf8("[SYS OK]"));
+	ok->setStyleSheet(QStringLiteral("color: %1; background: transparent; %2")
+				  .arg(QLatin1String(kYellow), terminalFont()));
 	ok->setAlignment(Qt::AlignCenter);
 	homeHudClock_ = new QLabel(QString::fromUtf8("--:--:--"));
 	homeHudClock_->setStyleSheet(
-		QStringLiteral("color: %1; background: transparent;")
-			.arg(QLatin1String(kYellow)));
+		QStringLiteral("color: %1; background: transparent; %2")
+			.arg(QLatin1String(kWarn), terminalFont()));
 	homeHudClock_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 	hudLay->addWidget(brand);
 	hudLay->addWidget(ok, 1);
@@ -281,13 +298,13 @@ QWidget *Dashboard::buildApPage()
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
 	lay->setContentsMargins(28, 24, 28, 24);
-	auto *title = new QLabel(QString::fromUtf8("■ 光感 AP3216C"));
-	title->setAlignment(Qt::AlignCenter);
-	title->setStyleSheet(titleStyle(kCyan));
+	auto *title = new QLabel(QString::fromUtf8("> SENSOR / AP3216C"));
+	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+	title->setStyleSheet(titleStyle(kGreen));
 	apDetail_ = new QLabel;
 	apDetail_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 	apDetail_->setStyleSheet(monoStyle());
-	auto *back = makeBackBtn(kCyan);
+	auto *back = makeBackBtn(kGreen);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
 	lay->addWidget(title);
 	lay->addWidget(apDetail_, 1);
@@ -301,8 +318,8 @@ QWidget *Dashboard::buildIcmPage()
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
 	lay->setContentsMargins(28, 24, 28, 24);
-	auto *title = new QLabel(QString::fromUtf8("■ 六轴 ICM20608"));
-	title->setAlignment(Qt::AlignCenter);
+	auto *title = new QLabel(QString::fromUtf8("> IMU / ICM20608"));
+	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 	title->setStyleSheet(titleStyle(kGreen));
 	icmDetail_ = new QLabel;
 	icmDetail_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
@@ -321,13 +338,13 @@ QWidget *Dashboard::buildSysPage()
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
 	lay->setContentsMargins(28, 24, 28, 24);
-	auto *title = new QLabel(QString::fromUtf8("■ 系统信息"));
-	title->setAlignment(Qt::AlignCenter);
-	title->setStyleSheet(titleStyle(kYellow));
+	auto *title = new QLabel(QString::fromUtf8("> SYSTEM"));
+	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+	title->setStyleSheet(titleStyle(kGreen));
 	sysDetail_ = new QLabel;
 	sysDetail_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 	sysDetail_->setStyleSheet(monoStyle());
-	auto *back = makeBackBtn(kYellow);
+	auto *back = makeBackBtn(kGreen);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
 	lay->addWidget(title);
 	lay->addWidget(sysDetail_, 1);
@@ -342,18 +359,18 @@ QWidget *Dashboard::buildLedsPage()
 	auto *lay = new QVBoxLayout(page);
 	lay->setContentsMargins(24, 20, 24, 20);
 	lay->setSpacing(8);
-	auto *title = new QLabel(QString::fromUtf8("■ 灯控"));
-	title->setAlignment(Qt::AlignCenter);
-	title->setStyleSheet(titleStyle(kOrange));
+	auto *title = new QLabel(QString::fromUtf8("> GPIO / LEDS"));
+	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+	title->setStyleSheet(titleStyle(kGreen));
 	ledDetail_ = new QLabel;
 	ledDetail_->setWordWrap(true);
 	ledDetail_->setStyleSheet(monoStyle());
 
-	auto *ledOn = new QPushButton(QString::fromUtf8("[ LED 开 ]"));
-	auto *ledOff = new QPushButton(QString::fromUtf8("[ LED 关 ]"));
-	auto *ledHb = new QPushButton(QString::fromUtf8("[ 恢复呼吸灯 ]"));
-	auto *beepOn = new QPushButton(QString::fromUtf8("[ 蜂鸣器 开 ]"));
-	auto *beepOff = new QPushButton(QString::fromUtf8("[ 蜂鸣器 关 ]"));
+	auto *ledOn = new QPushButton(QString::fromUtf8("[ LED ON ]"));
+	auto *ledOff = new QPushButton(QString::fromUtf8("[ LED OFF ]"));
+	auto *ledHb = new QPushButton(QString::fromUtf8("[ LED HEARTBEAT ]"));
+	auto *beepOn = new QPushButton(QString::fromUtf8("[ BEEP ON ]"));
+	auto *beepOff = new QPushButton(QString::fromUtf8("[ BEEP OFF ]"));
 	for (QPushButton *b : {ledOn, ledOff, ledHb, beepOn, beepOff}) {
 		b->setMinimumHeight(56);
 		b->setStyleSheet(pixelActionStyle(kPanel));
@@ -365,7 +382,7 @@ QWidget *Dashboard::buildLedsPage()
 	connect(beepOn, &QPushButton::clicked, this, &Dashboard::onBeepOn);
 	connect(beepOff, &QPushButton::clicked, this, &Dashboard::onBeepOff);
 
-	auto *back = makeBackBtn(kOrange);
+	auto *back = makeBackBtn(kGreen);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
 	lay->addWidget(title);
 	lay->addWidget(ledDetail_);
@@ -385,19 +402,20 @@ QWidget *Dashboard::buildKeysPage()
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
 	lay->setContentsMargins(28, 24, 28, 24);
-	auto *title = new QLabel(QString::fromUtf8("■ 按键"));
-	title->setAlignment(Qt::AlignCenter);
-	title->setStyleSheet(titleStyle(kCyan));
-	keyDetail_ = new QLabel(QString::fromUtf8("松开"));
+	auto *title = new QLabel(QString::fromUtf8("> INPUT / KEY"));
+	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+	title->setStyleSheet(titleStyle(kGreen));
+	keyDetail_ = new QLabel(QString::fromUtf8("[ RELEASED ]"));
 	keyDetail_->setAlignment(Qt::AlignCenter);
 	keyDetail_->setStyleSheet(QStringLiteral(
-		"font-size: 56px; font-weight: 900; color: %1;"
-		" background-color: %2; border: 4px double %3; padding: 24px;"
+		"%1 font-size: 48px; font-weight: bold; color: %2;"
+		" background-color: %3; border: 1px solid %4; padding: 24px;"
 		" background-image: none;")
-					  .arg(QLatin1String(kYellow),
+					  .arg(terminalFont(),
+					       QLatin1String(kText),
 					       QLatin1String(kInk),
 					       QLatin1String(kMuted)));
-	auto *back = makeBackBtn(kCyan);
+	auto *back = makeBackBtn(kGreen);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
 	lay->addWidget(title);
 	lay->addWidget(keyDetail_, 1);
@@ -411,18 +429,110 @@ QWidget *Dashboard::buildOtaPage()
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
 	lay->setContentsMargins(28, 24, 28, 24);
-	auto *title = new QLabel(QString::fromUtf8("■ OTA 状态"));
-	title->setAlignment(Qt::AlignCenter);
+	auto *title = new QLabel(QString::fromUtf8("> OTA / UPDATE"));
+	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 	title->setStyleSheet(titleStyle(kGreen));
 	otaDetail_ = new QLabel;
 	otaDetail_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 	otaDetail_->setStyleSheet(monoStyle());
+	otaProgressLabel_ = new QLabel(QString::fromUtf8("PROGRESS"));
+	otaProgressLabel_->setStyleSheet(QStringLiteral(
+		"%1 color: %2; font-size: 16px; font-weight: bold;")
+						 .arg(terminalFont(),
+						      QLatin1String(kYellow)));
+	otaProgressBar_ = new QProgressBar;
+	otaProgressBar_->setRange(0, 100);
+	otaProgressBar_->setValue(0);
+	otaProgressBar_->setTextVisible(true);
+	otaProgressBar_->setFormat(QStringLiteral("[%p%]"));
+	otaProgressBar_->setMinimumHeight(28);
+	otaProgressBar_->setStyleSheet(QStringLiteral(
+		"QProgressBar {"
+		"  background-color: %1; border: 1px solid %2; border-radius: 0;"
+		"  text-align: center; color: %2; font-weight: bold; font-size: 14px;"
+		"  %3"
+		"}"
+		"QProgressBar::chunk {"
+		"  background-color: %2; border: none; margin: 1px;"
+		"}")
+						  .arg(QLatin1String(kInk),
+						       QLatin1String(kText),
+						       terminalFont()));
+	setOtaProgressVisible(false);
+	otaPullBtn_ = new QPushButton(QString::fromUtf8("[ PULL LATEST & UPGRADE ]"));
+	otaPullBtn_->setMinimumHeight(64);
+	otaPullBtn_->setStyleSheet(pixelActionStyle(kGreen));
+	noFocus(otaPullBtn_);
+	connect(otaPullBtn_, &QPushButton::clicked, this,
+		&Dashboard::onOtaPullLatest);
+	otaPullProc_ = new QProcess(this);
+	connect(otaPullProc_,
+		QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+		this, &Dashboard::onOtaPullFinished);
+	connect(otaPullProc_, &QProcess::readyReadStandardOutput, this,
+		&Dashboard::onOtaPullStdout);
 	auto *back = makeBackBtn(kGreen);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
 	lay->addWidget(title);
 	lay->addWidget(otaDetail_, 1);
+	lay->addWidget(otaProgressLabel_);
+	lay->addWidget(otaProgressBar_);
+	lay->addWidget(otaPullBtn_);
 	lay->addWidget(back);
 	return page;
+}
+
+void Dashboard::setOtaProgressVisible(bool visible)
+{
+	if (otaProgressLabel_ != nullptr)
+		otaProgressLabel_->setVisible(visible);
+	if (otaProgressBar_ != nullptr)
+		otaProgressBar_->setVisible(visible);
+}
+
+void Dashboard::applyOtaProgressLine(const QString &line)
+{
+	const QString trimmed = line.trimmed();
+	if (!trimmed.startsWith(QStringLiteral("OTA_PROGRESS")))
+		return;
+	const QStringList parts = trimmed.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+	if (parts.size() < 2)
+		return;
+	bool ok = false;
+	const int pct = parts.at(1).toInt(&ok);
+	if (!ok)
+		return;
+	QString stage = parts.size() >= 3 ? parts.at(2) : QString();
+	QString stageZh = stage;
+	if (stage == QStringLiteral("resolving") ||
+	    stage == QStringLiteral("resolved"))
+		stageZh = QString::fromUtf8("解析目录");
+	else if (stage == QStringLiteral("downloading"))
+		stageZh = QString::fromUtf8("下载固件");
+	else if (stage == QStringLiteral("upgrading"))
+		stageZh = QString::fromUtf8("写入并切槽");
+	else if (stage == QStringLiteral("done"))
+		stageZh = QString::fromUtf8("完成，即将重启");
+	int clamped = pct;
+	if (clamped < 0)
+		clamped = 0;
+	if (clamped > 100)
+		clamped = 100;
+	/* UI 侧也保证单调，防止乱序/重复行导致回跳 */
+	if (clamped < otaProgressHighWater_)
+		clamped = otaProgressHighWater_;
+	otaProgressHighWater_ = clamped;
+	if (otaProgressBar_ != nullptr)
+		otaProgressBar_->setValue(clamped);
+	if (otaProgressLabel_ != nullptr)
+		otaProgressLabel_->setText(
+			QString::fromUtf8("PROGRESS %1% · %2")
+				.arg(clamped)
+				.arg(stageZh));
+	otaPullMsg_ = QString::fromUtf8("UPGRADING… %1% (%2)")
+			      .arg(clamped)
+			      .arg(stageZh);
+	refreshOtaLabels();
 }
 
 void Dashboard::refreshApLabels()
@@ -435,15 +545,14 @@ void Dashboard::refreshApLabels()
 		return;
 	}
 	homeApSummary_->setText(QString::fromUtf8("ALS=%1").arg(s.als));
-	apDetail_->setText(QString::fromUtf8(
-				   "红外 IR      : %1\n"
-				   "环境光 ALS   : %2\n"
-				   "接近 PS      : %3\n\n"
-				   "设备: %4")
-				   .arg(s.ir)
-				   .arg(s.als)
-				   .arg(s.ps)
-				   .arg(apDev_));
+	apDetail_->setText(
+		padDots(QString::fromUtf8("IR"), QString::number(s.ir)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("ALS"), QString::number(s.als)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("PS"), QString::number(s.ps)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("DEV"), apDev_));
 }
 
 void Dashboard::refreshIcmLabels()
@@ -456,24 +565,37 @@ void Dashboard::refreshIcmLabels()
 			QString::fromUtf8("读取失败\nIIO: %1").arg(icmName_));
 		return;
 	}
-	homeIcmSummary_->setText(QString::fromUtf8("az=%1g")
+	homeIcmSummary_->setText(QString::fromUtf8("AZ=%1G")
 					 .arg(s.az_g, 0, 'f', 2));
 	icmDetail_->setText(
-		QString::fromUtf8("加速度 raw: ax=%1 ay=%2 az=%3\n")
-			.arg(s.ax)
-			.arg(s.ay)
-			.arg(s.az) +
-		QString::fromUtf8("加速度 g  : ax=%1 ay=%2 az=%3\n")
-			.arg(s.ax_g, 0, 'f', 3)
-			.arg(s.ay_g, 0, 'f', 3)
-			.arg(s.az_g, 0, 'f', 3) +
-		QString::fromUtf8("角速度 dps: gx=%1 gy=%2 gz=%3\n")
-			.arg(s.gx_dps, 0, 'f', 2)
-			.arg(s.gy_dps, 0, 'f', 2)
-			.arg(s.gz_dps, 0, 'f', 2) +
-		QString::fromUtf8("温度      : %1 C\n\nIIO: %2")
-			.arg(s.temp_c, 0, 'f', 2)
-			.arg(icmName_));
+		padDots(QString::fromUtf8("AX_RAW"), QString::number(s.ax)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("AY_RAW"), QString::number(s.ay)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("AZ_RAW"), QString::number(s.az)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("AX_G"),
+			QString::number(s.ax_g, 'f', 3)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("AY_G"),
+			QString::number(s.ay_g, 'f', 3)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("AZ_G"),
+			QString::number(s.az_g, 'f', 3)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("GX_DPS"),
+			QString::number(s.gx_dps, 'f', 2)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("GY_DPS"),
+			QString::number(s.gy_dps, 'f', 2)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("GZ_DPS"),
+			QString::number(s.gz_dps, 'f', 2)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("TEMP_C"),
+			QString::number(s.temp_c, 'f', 2)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("IIO"), icmName_));
 }
 
 void Dashboard::refreshSysLabels()
@@ -483,18 +605,22 @@ void Dashboard::refreshSysLabels()
 	const int upMin = static_cast<int>(s.uptimeSec / 60.0);
 	homeSysSummary_->setText(fmtUnavailable(s.ipv4));
 	sysDetail_->setText(
-		QString::fromUtf8("主机名   : %1\n"
-				  "IPv4(%2): %3\n"
-				  "运行时间 : %4 分钟\n"
-				  "内存     : %5 / %6 MB\n"
-				  "负载 1m  : %7")
-			.arg(s.hostname)
-			.arg(iface_)
-			.arg(fmtUnavailable(s.ipv4))
-			.arg(upMin)
-			.arg(s.memAvailKb / 1024)
-			.arg(s.memTotalKb / 1024)
-			.arg(s.load1, 0, 'f', 2));
+		padDots(QString::fromUtf8("HOST"), s.hostname) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("IFACE"), iface_) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("IPV4"), fmtUnavailable(s.ipv4)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("UPTIME_MIN"), QString::number(upMin)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("MEM_AVAIL_MB"),
+			QString::number(s.memAvailKb / 1024)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("MEM_TOTAL_MB"),
+			QString::number(s.memTotalKb / 1024)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("LOAD1"),
+			QString::number(s.load1, 'f', 2)));
 }
 
 void Dashboard::refreshLedLabels()
@@ -513,16 +639,23 @@ void Dashboard::refreshLedLabels()
 	}
 	homeLedSummary_->setText(home);
 	ledDetail_->setText(
-		QString::fromUtf8("LED (%1)\n  trigger=%2  brightness=%3\n\n"
-				  "BEEP (%4)\n  trigger=%5  brightness=%6")
-			.arg(ledName_)
-			.arg(ledOk ? led.trigger : QString::fromUtf8("N/A"))
-			.arg(ledOk ? QString::number(led.brightness)
-				   : QString::fromUtf8("-"))
-			.arg(beepName_)
-			.arg(beepOk ? beep.trigger : QString::fromUtf8("N/A"))
-			.arg(beepOk ? QString::number(beep.brightness)
-				    : QString::fromUtf8("-")));
+		padDots(QString::fromUtf8("LED"), ledName_) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("LED_TRIG"),
+			ledOk ? led.trigger : QString::fromUtf8("N/A")) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("LED_BRIGHT"),
+			ledOk ? QString::number(led.brightness)
+			      : QString::fromUtf8("-")) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("BEEP"), beepName_) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("BEEP_TRIG"),
+			beepOk ? beep.trigger : QString::fromUtf8("N/A")) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("BEEP_BRIGHT"),
+			beepOk ? QString::number(beep.brightness)
+			       : QString::fromUtf8("-")));
 }
 
 void Dashboard::refreshOtaLabels()
@@ -531,14 +664,105 @@ void Dashboard::refreshOtaLabels()
 	const bool ok = readOtaStatus(&s);
 	homeOtaSummary_->setText(ok ? fmtUnavailable(s.activeSlot)
 				    : QString::fromUtf8("N/A"));
-	otaDetail_->setText(
-		QString::fromUtf8("active_slot       : %1\n"
-				  "upgrade_available : %2\n"
-				  "cmdline root      : %3\n\n"
-				  "(READ-ONLY / use Web OTA)")
-			.arg(fmtUnavailable(s.activeSlot))
-			.arg(fmtUnavailable(s.upgradeAvailable))
-			.arg(fmtUnavailable(s.cmdlineRootHint)));
+	QString body =
+		padDots(QString::fromUtf8("ACTIVE_SLOT"),
+			fmtUnavailable(s.activeSlot)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("UPGRADE_AVAIL"),
+			fmtUnavailable(s.upgradeAvailable)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("CMDLINE_ROOT"),
+			fmtUnavailable(s.cmdlineRootHint)) +
+		QLatin1Char('\n') +
+		padDots(QString::fromUtf8("FW_BASE"),
+			QString::fromUtf8("OTA_FIRMWARE_BASE")) +
+		QLatin1Char('\n') +
+		QString::fromUtf8("HINT....prefer stamped rootfs-*.swu");
+	if (!otaPullMsg_.isEmpty())
+		body += QString::fromUtf8("\n\nSTATUS..%1").arg(otaPullMsg_);
+	otaDetail_->setText(body);
+}
+
+void Dashboard::onOtaPullLatest()
+{
+	if (otaPullProc_ != nullptr &&
+	    otaPullProc_->state() != QProcess::NotRunning) {
+		otaPullMsg_ = QString::fromUtf8("升级进行中，请稍候…");
+		refreshOtaLabels();
+		return;
+	}
+	const auto reply = QMessageBox::question(
+		this, QString::fromUtf8("CONFIRM UPGRADE"),
+		QString::fromUtf8(
+			"Pull latest .swu from firmware base,\n"
+			"flash inactive slot, then reboot.\n"
+			"Continue?"),
+		QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+	if (reply != QMessageBox::Yes)
+		return;
+	otaStdoutBuf_.clear();
+	otaProgressHighWater_ = 0;
+	otaPullMsg_ = QString::fromUtf8("UPGRADING…");
+	if (otaProgressBar_ != nullptr)
+		otaProgressBar_->setValue(0);
+	if (otaProgressLabel_ != nullptr)
+		otaProgressLabel_->setText(
+			QString::fromUtf8("PROGRESS 0% · READY"));
+	setOtaProgressVisible(true);
+	if (otaPullBtn_ != nullptr)
+		otaPullBtn_->setEnabled(false);
+	refreshOtaLabels();
+	otaPullProc_->start(QStringLiteral("ota-agent"),
+			    {QStringLiteral("--pull-latest")});
+	if (!otaPullProc_->waitForStarted(3000)) {
+		otaPullMsg_ = QString::fromUtf8("FAIL: cannot start ota-agent");
+		setOtaProgressVisible(false);
+		if (otaPullBtn_ != nullptr)
+			otaPullBtn_->setEnabled(true);
+		refreshOtaLabels();
+	}
+}
+
+void Dashboard::onOtaPullStdout()
+{
+	otaStdoutBuf_.append(
+		QString::fromUtf8(otaPullProc_->readAllStandardOutput()));
+	int nl;
+	while ((nl = otaStdoutBuf_.indexOf(QLatin1Char('\n'))) >= 0) {
+		const QString line = otaStdoutBuf_.left(nl);
+		otaStdoutBuf_.remove(0, nl + 1);
+		applyOtaProgressLine(line);
+	}
+}
+
+void Dashboard::onOtaPullFinished(int exitCode, QProcess::ExitStatus status)
+{
+	if (!otaStdoutBuf_.isEmpty()) {
+		applyOtaProgressLine(otaStdoutBuf_);
+		otaStdoutBuf_.clear();
+	}
+	const QString err =
+		QString::fromUtf8(otaPullProc_->readAllStandardError());
+	if (otaPullBtn_ != nullptr)
+		otaPullBtn_->setEnabled(true);
+	if (status != QProcess::NormalExit || exitCode != 0) {
+		otaPullMsg_ = QString::fromUtf8("FAIL code=%1\n%2")
+				      .arg(exitCode)
+				      .arg(err.trimmed());
+		if (otaProgressLabel_ != nullptr)
+			otaProgressLabel_->setText(
+				QString::fromUtf8("PROGRESS FAIL"));
+	} else {
+		otaPullMsg_ = QString::fromUtf8(
+			"UPGRADE DONE (reboot if not already)\n%1")
+					  .arg(err.trimmed());
+		if (otaProgressBar_ != nullptr)
+			otaProgressBar_->setValue(100);
+		if (otaProgressLabel_ != nullptr)
+			otaProgressLabel_->setText(
+				QString::fromUtf8("PROGRESS 100% · DONE"));
+	}
+	refreshOtaLabels();
 }
 
 void Dashboard::onHomeTick()
@@ -667,9 +891,8 @@ void Dashboard::onBeepOff()
 
 void Dashboard::onKeyPressed(bool pressed)
 {
-	const QString text =
-		pressed ? QString::fromUtf8("按下") : QString::fromUtf8("松开");
-	keyDetail_->setText(text);
+	keyDetail_->setText(pressed ? QString::fromUtf8("[ PRESSED ]")
+				    : QString::fromUtf8("[ RELEASED ]"));
 	homeKeySummary_->setText(pressed ? QString::fromUtf8("DOWN")
 					 : QString::fromUtf8("UP"));
 }

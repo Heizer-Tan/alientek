@@ -1,5 +1,5 @@
 SUMMARY = "LCD 板级控制台（Qt6 linuxfb）"
-DESCRIPTION = "传感器、系统信息、LED/蜂鸣器、按键与 OTA 只读状态"
+DESCRIPTION = "传感器、系统信息、LED/蜂鸣器、按键与 OTA 拉取升级"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://main.cpp;beginline=1;endline=1;md5=234d7d4edd08962c0144e4604050e0b6"
 
@@ -12,6 +12,7 @@ RDEPENDS:${PN} = " \
     icm20608-module \
     ttf-wqy-microhei \
     libubootenv-bin \
+    ota-agent \
 "
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/../../common:"

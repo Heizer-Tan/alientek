@@ -43,6 +43,7 @@
 
 | 文档 | 内容 |
 |------|------|
+| [guide/boot-chain.md](guide/boot-chain.md) | Linux 启动链路（U-Boot / DTB / 内核） |
 | [guide/build.md](guide/build.md) | 编译命令、产物、kas 镜像排障 |
 | [guide/u-boot-recipe.md](guide/u-boot-recipe.md) | U-Boot 配方分层与升版 |
 | [guide/flash-tf.md](guide/flash-tf.md) | 烧写 TF 卡 / mmcboot |

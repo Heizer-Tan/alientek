@@ -1,2 +1,4 @@
 # ota-agent：升级与恢复相关路径（MQTT 见 /etc/default/mqtt-agent）
 export OTA_DOWNLOAD_PATH=/var/tmp/ota-download.swu
+# Qt / --pull-latest：HTTP 目录根（python -m http.server 等）
+export OTA_FIRMWARE_BASE=http://192.168.5.13:8000

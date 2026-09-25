@@ -39,6 +39,26 @@ board-apply-update /tmp/alientek-image-update-imx6ull-alientek-alpha.swu
 
 浏览器打开 `http://<板子IP>:8080/`，在「固件升级」区选择 `.swu` 后上传。服务端调用 `board-apply-update` 自动选非活动槽并切环境，成功后自动重启。无口令，仅建议在实验室可信局域网使用。
 
+## Qt 拉取最新（HTTP 目录）
+
+dashboard OTA 页「拉取最新并升级」会调用：
+
+```bash
+ota-agent --pull-latest
+# 或指定目录：
+ota-agent --pull-latest http://192.168.5.13:8000
+```
+
+默认目录来自 `/etc/default/ota-agent` 的 `OTA_FIRMWARE_BASE`（默认 `http://192.168.5.13:8000`）。  
+板端抓取目录 HTML，在 `alientek-image-update*.swu` 中：
+
+1. **优先**带时间戳的真实包：`…rootfs-YYYYMMDDHHMMSS.swu`（取最大时间戳）
+2. 若没有，再回退到无时间戳名 `…rootfs.swu`（Yocto 指向最新构建的软链）
+
+实验室场景不校验远端 sha256；下载后直接 `board-apply-update` 并重启。  
+`ota-agent` 向 stdout 输出 `OTA_PROGRESS <0-100> <stage>`，dashboard 进度条据此更新（解析目录 → 下载 10%–90% → 刷写 → 完成）。  
+仅解析选包可设：`OTA_PULL_DRY_RUN=1 ota-agent --pull-latest`（只打印选中 URL）。
+
 ## 首启确认与回滚
 
 - 升级阶段会把 `upgrade_available=1` 并切换 `active_slot`
@@ -58,3 +78,4 @@ fw_printenv bootcount
 当前板级 `boot.scr` 会按 `active_slot` 选择根分区：优先使用 U-Boot 环境中的 `rootfs_a_partuuid` / `rootfs_b_partuuid`（`part uuid mmc 0:2/3`，需 `CONFIG_CMD_PART`），未缓存时回退 `/dev/mmcblk0p2` 与 `/dev/mmcblk0p3`。
 
 MQTT 远程升级见 [mqtt-ota.md](./mqtt-ota.md)。
+Qt 拉取最新见上文「Qt 拉取最新（HTTP 目录）」。

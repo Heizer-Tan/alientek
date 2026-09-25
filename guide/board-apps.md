@@ -56,13 +56,13 @@ icm20608-read -w
 
 ## LCD 板级控制台
 
-镜像含 `dashboard`（**Qt6 Widgets + linuxfb** `/dev/fb0` + evdev/Goodix 触摸），开机自启。窗口标题为「板级控制台」，主页 **2×3** 入口：
+镜像含 `dashboard`（**Qt6 Widgets + linuxfb** `/dev/fb0` + evdev/Goodix 触摸），开机自启。视觉为**黑底荧光绿终端风**（等宽字、细线框、点线对齐）。主页 **2×3** 入口：
 
 - 光感 AP3216C / 六轴 ICM20608（详情页）
 - 系统信息（IP、运行时间、内存、负载）
 - 灯控（LED 开/关/恢复呼吸灯，蜂鸣器开/关）
 - 按键状态（`gpio-key`）
-- OTA 只读槽位（`fw_printenv`，升级仍走 Web）
+- OTA 只读槽位（`fw_printenv`）；详情页可「拉取最新并升级」（`ota-agent --pull-latest`，见 [ota-swupdate.md](./ota-swupdate.md)）
 
 手动：`/etc/init.d/dashboard start|stop`  
 可选环境变量见 `/etc/default/dashboard`（如 `DASHBOARD_IFACE`、`DASHBOARD_LED_NAME`、`QT_QPA_PLATFORM`）。

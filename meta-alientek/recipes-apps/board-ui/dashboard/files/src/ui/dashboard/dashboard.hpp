@@ -1,10 +1,12 @@
 /* SPDX-License-Identifier: MIT */
 #pragma once
 
+#include <QProcess>
 #include <QString>
 #include <QWidget>
 
 class QLabel;
+class QProgressBar;
 class QPushButton;
 class QStackedWidget;
 class QTimer;
@@ -34,6 +36,9 @@ private slots:
 	void onBeepOn();
 	void onBeepOff();
 	void onKeyPressed(bool pressed);
+	void onOtaPullLatest();
+	void onOtaPullFinished(int exitCode, QProcess::ExitStatus status);
+	void onOtaPullStdout();
 
 private:
 	enum Page : int {
@@ -62,6 +67,8 @@ private:
 	void refreshLedLabels();
 	void refreshOtaLabels();
 	void setPageTimers(int pageIndex);
+	void setOtaProgressVisible(bool visible);
+	void applyOtaProgressLine(const QString &line);
 
 	QString apDev_;
 	QString icmName_;
@@ -69,6 +76,9 @@ private:
 	QString ledName_;
 	QString beepName_;
 	QString ledsRoot_;
+	QString otaPullMsg_;
+	QString otaStdoutBuf_;
+	int otaProgressHighWater_ = 0;
 
 	QStackedWidget *stack_ = nullptr;
 	QLabel *homeApSummary_ = nullptr;
@@ -84,6 +94,10 @@ private:
 	QLabel *ledDetail_ = nullptr;
 	QLabel *keyDetail_ = nullptr;
 	QLabel *otaDetail_ = nullptr;
+	QLabel *otaProgressLabel_ = nullptr;
+	QProgressBar *otaProgressBar_ = nullptr;
+	QPushButton *otaPullBtn_ = nullptr;
+	QProcess *otaPullProc_ = nullptr;
 	QTimer *homeTimer_ = nullptr;
 	QTimer *detailTimer_ = nullptr;
 	KeyWatcher *keys_ = nullptr;
