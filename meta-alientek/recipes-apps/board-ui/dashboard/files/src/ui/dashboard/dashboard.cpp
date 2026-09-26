@@ -6,13 +6,14 @@
 #include "hw/sensors/sensors.hpp"
 #include "sys/ota/ota_status.hpp"
 #include "sys/sysinfo/sysinfo.hpp"
+#include "ui/style/pixel_widgets.hpp"
 
+#include <QAbstractButton>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
 #include <QProcess>
-#include <QProgressBar>
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QStackedWidget>
@@ -22,18 +23,21 @@
 
 namespace {
 
-/* 复古终端：黑底荧光绿（参考 CRT/console） */
-constexpr char kBg[] = "#000000";
-constexpr char kPanel[] = "#001408";
-constexpr char kPanelHi[] = "#00331a";
-constexpr char kText[] = "#00FF66";
-constexpr char kMuted[] = "#007A3D";
-constexpr char kCyan[] = "#00FF66";
-constexpr char kGreen[] = "#00FF66";
-constexpr char kYellow[] = "#FFCC00";
-constexpr char kOrange[] = "#FF3344";
-constexpr char kInk[] = "#000000";
-constexpr char kWarn[] = "#FF3344";
+/*
+ * 视觉参考：Pxlkit surface=pixel
+ * —— 阶梯角 / tone 粗边 / 右下硬投影 / 16×16 精灵（见 pixel_widgets）
+ */
+constexpr char kBg[] = "#05080C";
+constexpr char kPanel[] = "#0B1220";
+constexpr char kPanelHi[] = "#152238";
+constexpr char kText[] = "#E8FFF0";
+constexpr char kMuted[] = "#5C7A6A";
+constexpr char kInk[] = "#020406";
+constexpr char kGreen[] = "#22C55E";
+constexpr char kCyan[] = "#22D3EE";
+constexpr char kYellow[] = "#FBBF24";
+constexpr char kOrange[] = "#F87171";
+constexpr char kPurple[] = "#C084FC";
 
 QString terminalFont()
 {
@@ -42,51 +46,44 @@ QString terminalFont()
 		"monospace;");
 }
 
-QString pixelBtnStyle(const char * /*face*/)
+/* 动作按钮：粗边 + margin 假硬影 */
+QString pixelActionStyle(const char *tone)
 {
 	return QStringLiteral(
 		"QPushButton {"
 		"  background-color: %1; color: %2; %3"
-		"  border: 1px solid %2; border-radius: 0px; outline: none;"
-		"  text-align: left; padding: 6px 10px; font-weight: bold;"
-		"}"
-		"QPushButton:focus { outline: none; border: 1px solid %4; }"
-		"QPushButton:pressed {"
-		"  background-color: %5; color: %1; border: 1px solid %2;"
-		"}")
-		.arg(QLatin1String(kPanel), QLatin1String(kText), terminalFont(),
-		     QLatin1String(kYellow), QLatin1String(kText));
-}
-
-QString pixelActionStyle(const char * /*face*/)
-{
-	return QStringLiteral(
-		"QPushButton {"
-		"  background-color: %1; color: %2; %3"
-		"  border: 1px solid %2; border-radius: 0px; outline: none;"
-		"  text-align: center; padding: 10px; font-weight: bold;"
-		"  font-size: 18px;"
+		"  border: 3px solid %2;"
+		"  border-radius: 0px; outline: none;"
+		"  text-align: center; padding: 6px; font-weight: bold;"
+		"  font-size: 15px;"
+		"  margin-right: 4px; margin-bottom: 4px;"
 		"}"
 		"QPushButton:focus { outline: none; }"
 		"QPushButton:pressed {"
-		"  background-color: %2; color: %1; border: 1px solid %2;"
+		"  background-color: %2; color: %4;"
+		"  margin-top: 4px; margin-left: 4px;"
+		"  margin-right: 0px; margin-bottom: 0px;"
 		"}")
-		.arg(QLatin1String(kPanel), QLatin1String(kText), terminalFont());
+		.arg(QLatin1String(kPanel), QLatin1String(tone), terminalFont(),
+		     QLatin1String(kInk));
 }
 
 QString titleStyle(const char *accent)
 {
 	return QStringLiteral(
-		"%1 font-size: 22px; font-weight: bold; color: %2;"
-		" letter-spacing: 1px;")
-		.arg(terminalFont(), QLatin1String(accent));
+		"%1 font-size: 16px; font-weight: bold; color: %2;"
+		" letter-spacing: 2px;"
+		" background-color: %3; border: 3px solid %2; padding: 4px 8px;")
+		.arg(terminalFont(), QLatin1String(kInk), QLatin1String(accent));
 }
 
 QString monoStyle()
 {
 	return QStringLiteral(
-		"%1 font-size: 18px; color: %2;"
-		" background-color: %3; border: 1px solid %4; padding: 12px;")
+		"%1 font-size: 15px; color: %2;"
+		" background-color: %3;"
+		" border: 3px solid %4;"
+		" padding: 8px;")
 		.arg(terminalFont(), QLatin1String(kText), QLatin1String(kInk),
 		     QLatin1String(kMuted));
 }
@@ -96,7 +93,6 @@ QString fmtUnavailable(const QString &v)
 	return v.isEmpty() ? QString::fromUtf8("N/A") : v;
 }
 
-/* 终端点线对齐：LABEL........VALUE */
 QString padDots(const QString &label, const QString &value, int width = 22)
 {
 	QString left = label;
@@ -107,16 +103,16 @@ QString padDots(const QString &label, const QString &value, int width = 22)
 
 void noFocus(QPushButton *b)
 {
-	/* 触摸屏去掉 Qt 默认虚线焦点框 */
 	b->setFocusPolicy(Qt::NoFocus);
 	b->setAttribute(Qt::WA_MacShowFocusRect, false);
 }
 
-QPushButton *makeBackBtn(const char *face)
+QPushButton *makeBackBtn(const char *tone)
 {
-	auto *back = new QPushButton(QString::fromUtf8("[ BACK ]"));
-	back->setMinimumHeight(64);
-	back->setStyleSheet(pixelActionStyle(face));
+	auto *back = new QPushButton(QString::fromUtf8("[ << BACK ]"));
+	back->setMinimumHeight(48);
+	back->setMaximumHeight(52);
+	back->setStyleSheet(pixelActionStyle(tone));
 	noFocus(back);
 	return back;
 }
@@ -165,17 +161,17 @@ Dashboard::Dashboard(const QString &apDev, const QString &icmName,
 
 void Dashboard::applyDarkStyle(QWidget *w)
 {
-	/* 纯黑底 + 绿字；细扫描线感用极淡点阵 */
+	/* 高对比棋盘点阵，强化像素底 */
 	w->setStyleSheet(QStringLiteral(
 		"QWidget {"
 		"  background-color: %1; color: %2; %3"
-		"  background-image: radial-gradient(%4 1px, transparent 1px);"
-		"  background-size: 3px 3px;"
+		"  background-image: radial-gradient(%4 1.5px, transparent 1.5px);"
+		"  background-size: 6px 6px;"
 		"}"
 		"QLabel { background: transparent; background-image: none; }"
 		"QStackedWidget { background-color: %1;"
-		"  background-image: radial-gradient(%4 1px, transparent 1px);"
-		"  background-size: 3px 3px; }"
+		"  background-image: radial-gradient(%4 1.5px, transparent 1.5px);"
+		"  background-size: 6px 6px; }"
 		"QPushButton, QPushButton:focus { outline: none; }"
 		"QMessageBox { background-color: %1; color: %2; }"
 		"QMessageBox QLabel { color: %2; %3 }"
@@ -185,36 +181,47 @@ void Dashboard::applyDarkStyle(QWidget *w)
 	w->setFocusPolicy(Qt::NoFocus);
 }
 
-QPushButton *Dashboard::makeHomeCard(const QString &title, QLabel **summaryOut,
-				     const char *accent)
+PixelShell *Dashboard::makeHomeCard(PixelGlyph glyph, const QString &title,
+				    QLabel **summaryOut, const char *accent)
 {
-	auto *btn = new QPushButton;
-	noFocus(btn);
-	btn->setFixedHeight(150);
-	btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-	btn->setCursor(Qt::PointingHandCursor);
-	btn->setStyleSheet(pixelBtnStyle(kPanel));
-	auto *col = new QVBoxLayout(btn);
-	col->setContentsMargins(8, 6, 8, 6);
-	col->setSpacing(4);
+	const QColor tone{QLatin1String(accent)};
+	auto *shell = new PixelShell(tone);
+	shell->setMinimumHeight(88);
 
-	auto *tag = new QLabel(QString::fromUtf8("> ") + title.toUpper());
+	/* 实心 tone 顶栏 + 像素精灵 + 标题 */
+	auto *bar = new QWidget;
+	bar->setAttribute(Qt::WA_TransparentForMouseEvents);
+	bar->setFixedHeight(34);
+	bar->setStyleSheet(QStringLiteral(
+		"background-color: %1; border: none; background-image: none;")
+				   .arg(QLatin1String(accent)));
+	auto *barLay = new QHBoxLayout(bar);
+	barLay->setContentsMargins(6, 1, 6, 1);
+	barLay->setSpacing(8);
+	auto *icon = new PixelIcon(glyph, QColor(QLatin1String(kInk)));
+	auto *tag = new QLabel(title.toUpper());
 	tag->setAttribute(Qt::WA_TransparentForMouseEvents);
-	tag->setStyleSheet(QStringLiteral("%1 font-size: 20px; font-weight: bold; color: %2;")
-				   .arg(terminalFont(), QLatin1String(accent)));
+	tag->setStyleSheet(QStringLiteral(
+		"%1 font-size: 15px; font-weight: bold; color: %2;"
+		" letter-spacing: 2px; background: transparent;")
+				   .arg(terminalFont(), QLatin1String(kInk)));
+	barLay->addWidget(icon, 0, Qt::AlignVCenter);
+	barLay->addWidget(tag, 1, Qt::AlignVCenter);
 
 	auto *sum = new QLabel(QString::fromUtf8("...."));
 	sum->setAttribute(Qt::WA_TransparentForMouseEvents);
-	sum->setWordWrap(false);
-	sum->setStyleSheet(QStringLiteral("%1 font-size: 16px; color: %2;")
-				   .arg(terminalFont(), QLatin1String(kMuted)));
+	sum->setWordWrap(true);
+	sum->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+	sum->setStyleSheet(QStringLiteral(
+		"%1 font-size: 14px; color: %2; padding: 6px 8px;"
+		" background: transparent;")
+				   .arg(terminalFont(), QLatin1String(kText)));
 
-	col->addWidget(tag);
-	col->addWidget(sum);
-	col->addStretch(1);
+	shell->body()->addWidget(bar);
+	shell->body()->addWidget(sum, 1);
 	if (summaryOut)
 		*summaryOut = sum;
-	return btn;
+	return shell;
 }
 
 QWidget *Dashboard::buildHomePage()
@@ -222,73 +229,73 @@ QWidget *Dashboard::buildHomePage()
 	auto *page = new QWidget;
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
-	lay->setContentsMargins(12, 8, 12, 8);
-	lay->setSpacing(8);
+	lay->setContentsMargins(10, 6, 10, 6);
+	lay->setSpacing(4);
 
-	/* 顶栏：终端 HUD */
-	auto *hud = new QWidget;
-	hud->setObjectName(QStringLiteral("hud"));
-	hud->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-	hud->setStyleSheet(QStringLiteral(
-		"QWidget#hud {"
-		"  background-color: %1; color: %2; %3"
-		"  border: 1px solid %2; padding: 4px 8px;"
-		"  font-weight: bold; font-size: 15px;"
-		"  background-image: none;"
-		"}")
-				   .arg(QLatin1String(kInk), QLatin1String(kText),
-					terminalFont()));
-
-	auto *hudLay = new QHBoxLayout(hud);
-	hudLay->setContentsMargins(4, 2, 4, 2);
-	hudLay->setSpacing(8);
-	auto *brand = new QLabel(QString::fromUtf8("ALIENTEK-ALPHA // CONSOLE"));
-	brand->setStyleSheet(QStringLiteral("color: %1; background: transparent; %2")
-				     .arg(QLatin1String(kText), terminalFont()));
+	/* HUD：PixelShell 包一层，自带阶梯角+硬影 */
+	auto *hudShell = new PixelShell(QColor(QLatin1String(kCyan)));
+	hudShell->setMinimumHeight(44);
+	hudShell->setMaximumHeight(48);
+	hudShell->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	hudShell->setAttribute(Qt::WA_TransparentForMouseEvents);
+	hudShell->setCursor(Qt::ArrowCursor);
+	auto *brand = new QLabel(QString::fromUtf8("ALIENTEK // PIXEL"));
+	brand->setStyleSheet(QStringLiteral(
+		"%1 color: %2; font-size: 14px; font-weight: bold;"
+		" letter-spacing: 2px; background: transparent;")
+				     .arg(terminalFont(),
+					  QLatin1String(kCyan)));
 	auto *ok = new QLabel(QString::fromUtf8("[SYS OK]"));
-	ok->setStyleSheet(QStringLiteral("color: %1; background: transparent; %2")
-				  .arg(QLatin1String(kYellow), terminalFont()));
+	ok->setStyleSheet(QStringLiteral(
+		"%1 color: %2; font-size: 13px; font-weight: bold;"
+		" background: transparent;")
+				  .arg(terminalFont(), QLatin1String(kGreen)));
 	ok->setAlignment(Qt::AlignCenter);
 	homeHudClock_ = new QLabel(QString::fromUtf8("--:--:--"));
-	homeHudClock_->setStyleSheet(
-		QStringLiteral("color: %1; background: transparent; %2")
-			.arg(QLatin1String(kWarn), terminalFont()));
+	homeHudClock_->setStyleSheet(QStringLiteral(
+		"%1 color: %2; font-size: 14px; font-weight: bold;"
+		" background: transparent;")
+					     .arg(terminalFont(),
+						  QLatin1String(kYellow)));
 	homeHudClock_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-	hudLay->addWidget(brand);
-	hudLay->addWidget(ok, 1);
-	hudLay->addWidget(homeHudClock_);
-	lay->addWidget(hud, 0);
+	auto *hudRow = new QHBoxLayout;
+	hudRow->setContentsMargins(0, 0, 0, 0);
+	hudRow->setSpacing(8);
+	hudRow->addWidget(brand);
+	hudRow->addWidget(ok, 1);
+	hudRow->addWidget(homeHudClock_);
+	hudShell->body()->addLayout(hudRow);
+	lay->addWidget(hudShell, 0);
 
 	auto *grid = new QGridLayout;
 	grid->setHorizontalSpacing(10);
 	grid->setVerticalSpacing(8);
 	grid->setContentsMargins(0, 0, 0, 0);
-	auto *apBtn = makeHomeCard(QString::fromUtf8("光感"), &homeApSummary_, kCyan);
-	auto *icmBtn =
-		makeHomeCard(QString::fromUtf8("六轴"), &homeIcmSummary_, kGreen);
-	auto *sysBtn =
-		makeHomeCard(QString::fromUtf8("系统"), &homeSysSummary_, kYellow);
-	auto *ledBtn =
-		makeHomeCard(QString::fromUtf8("灯控"), &homeLedSummary_, kOrange);
-	auto *keyBtn =
-		makeHomeCard(QString::fromUtf8("按键"), &homeKeySummary_, kCyan);
-	auto *otaBtn =
-		makeHomeCard(QString::fromUtf8("OTA"), &homeOtaSummary_, kGreen);
-	connect(apBtn, &QPushButton::clicked, this, &Dashboard::openAp);
-	connect(icmBtn, &QPushButton::clicked, this, &Dashboard::openIcm);
-	connect(sysBtn, &QPushButton::clicked, this, &Dashboard::openSys);
-	connect(ledBtn, &QPushButton::clicked, this, &Dashboard::openLeds);
-	connect(keyBtn, &QPushButton::clicked, this, &Dashboard::openKeys);
-	connect(otaBtn, &QPushButton::clicked, this, &Dashboard::openOta);
+	auto *apBtn = makeHomeCard(PixelGlyph::Light, QString::fromUtf8("光感"),
+				   &homeApSummary_, kCyan);
+	auto *icmBtn = makeHomeCard(PixelGlyph::Imu, QString::fromUtf8("六轴"),
+				    &homeIcmSummary_, kGreen);
+	auto *sysBtn = makeHomeCard(PixelGlyph::Sys, QString::fromUtf8("系统"),
+				    &homeSysSummary_, kYellow);
+	auto *ledBtn = makeHomeCard(PixelGlyph::Led, QString::fromUtf8("灯控"),
+				    &homeLedSummary_, kOrange);
+	auto *keyBtn = makeHomeCard(PixelGlyph::Key, QString::fromUtf8("按键"),
+				    &homeKeySummary_, kPurple);
+	auto *otaBtn = makeHomeCard(PixelGlyph::Ota, QString::fromUtf8("OTA"),
+				    &homeOtaSummary_, kGreen);
+	connect(apBtn, &QAbstractButton::clicked, this, &Dashboard::openAp);
+	connect(icmBtn, &QAbstractButton::clicked, this, &Dashboard::openIcm);
+	connect(sysBtn, &QAbstractButton::clicked, this, &Dashboard::openSys);
+	connect(ledBtn, &QAbstractButton::clicked, this, &Dashboard::openLeds);
+	connect(keyBtn, &QAbstractButton::clicked, this, &Dashboard::openKeys);
+	connect(otaBtn, &QAbstractButton::clicked, this, &Dashboard::openOta);
 	grid->addWidget(apBtn, 0, 0);
 	grid->addWidget(icmBtn, 0, 1);
 	grid->addWidget(sysBtn, 1, 0);
 	grid->addWidget(ledBtn, 1, 1);
 	grid->addWidget(keyBtn, 2, 0);
 	grid->addWidget(otaBtn, 2, 1);
-	lay->addLayout(grid, 0);
-	/* 剩余高度留白，不把卡片纵向拉满 */
-	lay->addStretch(1);
+	lay->addLayout(grid, 1);
 	return page;
 }
 
@@ -297,16 +304,17 @@ QWidget *Dashboard::buildApPage()
 	auto *page = new QWidget;
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
-	lay->setContentsMargins(28, 24, 28, 24);
-	auto *title = new QLabel(QString::fromUtf8("> SENSOR / AP3216C"));
+	lay->setContentsMargins(16, 12, 16, 12);
+	lay->setSpacing(6);
+	auto *title = new QLabel(QString::fromUtf8("SENSOR / AP3216C"));
 	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-	title->setStyleSheet(titleStyle(kGreen));
+	title->setStyleSheet(titleStyle(kCyan));
+	lay->addWidget(title);
 	apDetail_ = new QLabel;
 	apDetail_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 	apDetail_->setStyleSheet(monoStyle());
-	auto *back = makeBackBtn(kGreen);
+	auto *back = makeBackBtn(kCyan);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
-	lay->addWidget(title);
 	lay->addWidget(apDetail_, 1);
 	lay->addWidget(back);
 	return page;
@@ -317,16 +325,17 @@ QWidget *Dashboard::buildIcmPage()
 	auto *page = new QWidget;
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
-	lay->setContentsMargins(28, 24, 28, 24);
-	auto *title = new QLabel(QString::fromUtf8("> IMU / ICM20608"));
+	lay->setContentsMargins(16, 12, 16, 12);
+	lay->setSpacing(6);
+	auto *title = new QLabel(QString::fromUtf8("IMU / ICM20608"));
 	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 	title->setStyleSheet(titleStyle(kGreen));
+	lay->addWidget(title);
 	icmDetail_ = new QLabel;
 	icmDetail_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 	icmDetail_->setStyleSheet(monoStyle());
 	auto *back = makeBackBtn(kGreen);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
-	lay->addWidget(title);
 	lay->addWidget(icmDetail_, 1);
 	lay->addWidget(back);
 	return page;
@@ -337,16 +346,17 @@ QWidget *Dashboard::buildSysPage()
 	auto *page = new QWidget;
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
-	lay->setContentsMargins(28, 24, 28, 24);
-	auto *title = new QLabel(QString::fromUtf8("> SYSTEM"));
+	lay->setContentsMargins(16, 12, 16, 12);
+	lay->setSpacing(6);
+	auto *title = new QLabel(QString::fromUtf8("SYSTEM"));
 	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-	title->setStyleSheet(titleStyle(kGreen));
+	title->setStyleSheet(titleStyle(kYellow));
+	lay->addWidget(title);
 	sysDetail_ = new QLabel;
 	sysDetail_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 	sysDetail_->setStyleSheet(monoStyle());
-	auto *back = makeBackBtn(kGreen);
+	auto *back = makeBackBtn(kYellow);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
-	lay->addWidget(title);
 	lay->addWidget(sysDetail_, 1);
 	lay->addWidget(back);
 	return page;
@@ -357,13 +367,15 @@ QWidget *Dashboard::buildLedsPage()
 	auto *page = new QWidget;
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
-	lay->setContentsMargins(24, 20, 24, 20);
-	lay->setSpacing(8);
-	auto *title = new QLabel(QString::fromUtf8("> GPIO / LEDS"));
+	lay->setContentsMargins(16, 10, 16, 10);
+	lay->setSpacing(4);
+	auto *title = new QLabel(QString::fromUtf8("GPIO / LEDS"));
 	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-	title->setStyleSheet(titleStyle(kGreen));
+	title->setStyleSheet(titleStyle(kOrange));
+	lay->addWidget(title);
 	ledDetail_ = new QLabel;
 	ledDetail_->setWordWrap(true);
+	ledDetail_->setMaximumHeight(72);
 	ledDetail_->setStyleSheet(monoStyle());
 
 	auto *ledOn = new QPushButton(QString::fromUtf8("[ LED ON ]"));
@@ -371,9 +383,14 @@ QWidget *Dashboard::buildLedsPage()
 	auto *ledHb = new QPushButton(QString::fromUtf8("[ LED HEARTBEAT ]"));
 	auto *beepOn = new QPushButton(QString::fromUtf8("[ BEEP ON ]"));
 	auto *beepOff = new QPushButton(QString::fromUtf8("[ BEEP OFF ]"));
+	ledOn->setStyleSheet(pixelActionStyle(kGreen));
+	ledOff->setStyleSheet(pixelActionStyle(kMuted));
+	ledHb->setStyleSheet(pixelActionStyle(kCyan));
+	beepOn->setStyleSheet(pixelActionStyle(kYellow));
+	beepOff->setStyleSheet(pixelActionStyle(kMuted));
 	for (QPushButton *b : {ledOn, ledOff, ledHb, beepOn, beepOff}) {
-		b->setMinimumHeight(56);
-		b->setStyleSheet(pixelActionStyle(kPanel));
+		b->setMinimumHeight(42);
+		b->setMaximumHeight(46);
 		noFocus(b);
 	}
 	connect(ledOn, &QPushButton::clicked, this, &Dashboard::onLedOn);
@@ -382,9 +399,8 @@ QWidget *Dashboard::buildLedsPage()
 	connect(beepOn, &QPushButton::clicked, this, &Dashboard::onBeepOn);
 	connect(beepOff, &QPushButton::clicked, this, &Dashboard::onBeepOff);
 
-	auto *back = makeBackBtn(kGreen);
+	auto *back = makeBackBtn(kOrange);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
-	lay->addWidget(title);
 	lay->addWidget(ledDetail_);
 	lay->addWidget(ledOn);
 	lay->addWidget(ledOff);
@@ -401,23 +417,24 @@ QWidget *Dashboard::buildKeysPage()
 	auto *page = new QWidget;
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
-	lay->setContentsMargins(28, 24, 28, 24);
-	auto *title = new QLabel(QString::fromUtf8("> INPUT / KEY"));
+	lay->setContentsMargins(16, 12, 16, 12);
+	lay->setSpacing(6);
+	auto *title = new QLabel(QString::fromUtf8("INPUT / KEY"));
 	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-	title->setStyleSheet(titleStyle(kGreen));
+	title->setStyleSheet(titleStyle(kPurple));
+	lay->addWidget(title);
 	keyDetail_ = new QLabel(QString::fromUtf8("[ RELEASED ]"));
 	keyDetail_->setAlignment(Qt::AlignCenter);
 	keyDetail_->setStyleSheet(QStringLiteral(
-		"%1 font-size: 48px; font-weight: bold; color: %2;"
-		" background-color: %3; border: 1px solid %4; padding: 24px;"
-		" background-image: none;")
+		"%1 font-size: 40px; font-weight: bold; color: %2;"
+		" background-color: %3; border: 3px solid %4;"
+		" padding: 20px; background-image: none; letter-spacing: 2px;")
 					  .arg(terminalFont(),
 					       QLatin1String(kText),
 					       QLatin1String(kInk),
-					       QLatin1String(kMuted)));
-	auto *back = makeBackBtn(kGreen);
+					       QLatin1String(kPurple)));
+	auto *back = makeBackBtn(kPurple);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
-	lay->addWidget(title);
 	lay->addWidget(keyDetail_, 1);
 	lay->addWidget(back);
 	return page;
@@ -428,39 +445,26 @@ QWidget *Dashboard::buildOtaPage()
 	auto *page = new QWidget;
 	applyDarkStyle(page);
 	auto *lay = new QVBoxLayout(page);
-	lay->setContentsMargins(28, 24, 28, 24);
-	auto *title = new QLabel(QString::fromUtf8("> OTA / UPDATE"));
+	lay->setContentsMargins(16, 12, 16, 12);
+	lay->setSpacing(6);
+	auto *title = new QLabel(QString::fromUtf8("OTA / UPDATE"));
 	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 	title->setStyleSheet(titleStyle(kGreen));
+	lay->addWidget(title);
 	otaDetail_ = new QLabel;
 	otaDetail_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 	otaDetail_->setStyleSheet(monoStyle());
-	otaProgressLabel_ = new QLabel(QString::fromUtf8("PROGRESS"));
+	otaProgressLabel_ = new QLabel(QString::fromUtf8(">> PROGRESS"));
 	otaProgressLabel_->setStyleSheet(QStringLiteral(
-		"%1 color: %2; font-size: 16px; font-weight: bold;")
+		"%1 color: %2; font-size: 14px; font-weight: bold;"
+		" letter-spacing: 1px;")
 						 .arg(terminalFont(),
 						      QLatin1String(kYellow)));
-	otaProgressBar_ = new QProgressBar;
-	otaProgressBar_->setRange(0, 100);
-	otaProgressBar_->setValue(0);
-	otaProgressBar_->setTextVisible(true);
-	otaProgressBar_->setFormat(QStringLiteral("[%p%]"));
-	otaProgressBar_->setMinimumHeight(28);
-	otaProgressBar_->setStyleSheet(QStringLiteral(
-		"QProgressBar {"
-		"  background-color: %1; border: 1px solid %2; border-radius: 0;"
-		"  text-align: center; color: %2; font-weight: bold; font-size: 14px;"
-		"  %3"
-		"}"
-		"QProgressBar::chunk {"
-		"  background-color: %2; border: none; margin: 1px;"
-		"}")
-						  .arg(QLatin1String(kInk),
-						       QLatin1String(kText),
-						       terminalFont()));
+	otaProgressBar_ = new PixelProgressBar;
 	setOtaProgressVisible(false);
 	otaPullBtn_ = new QPushButton(QString::fromUtf8("[ PULL LATEST & UPGRADE ]"));
-	otaPullBtn_->setMinimumHeight(64);
+	otaPullBtn_->setMinimumHeight(48);
+	otaPullBtn_->setMaximumHeight(52);
 	otaPullBtn_->setStyleSheet(pixelActionStyle(kGreen));
 	noFocus(otaPullBtn_);
 	connect(otaPullBtn_, &QPushButton::clicked, this,
@@ -473,7 +477,6 @@ QWidget *Dashboard::buildOtaPage()
 		&Dashboard::onOtaPullStdout);
 	auto *back = makeBackBtn(kGreen);
 	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
-	lay->addWidget(title);
 	lay->addWidget(otaDetail_, 1);
 	lay->addWidget(otaProgressLabel_);
 	lay->addWidget(otaProgressBar_);

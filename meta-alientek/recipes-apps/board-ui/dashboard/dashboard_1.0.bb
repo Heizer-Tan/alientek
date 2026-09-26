@@ -20,6 +20,8 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/../../common:"
 SRC_URI = " \
     file://src/main.cpp \
     file://src/ui/style/nofocus_style.hpp \
+    file://src/ui/style/pixel_widgets.cpp \
+    file://src/ui/style/pixel_widgets.hpp \
     file://src/ui/dashboard/dashboard.cpp \
     file://src/ui/dashboard/dashboard.hpp \
     file://src/hw/sensors/sensors.cpp \

@@ -12,6 +12,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR} hw)
 add_executable(dashboard
 	main.cpp
 	ui/dashboard/dashboard.cpp
+	ui/style/pixel_widgets.cpp
 	hw/sensors/sensors.cpp
 	hw/leds/leds.cpp
 	sys/sysinfo/sysinfo.cpp

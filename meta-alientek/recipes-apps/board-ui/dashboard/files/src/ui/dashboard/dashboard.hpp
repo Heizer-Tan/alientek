@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: MIT */
 #pragma once
 
+#include "ui/style/pixel_widgets.hpp"
+
 #include <QProcess>
 #include <QString>
 #include <QWidget>
 
 class QLabel;
-class QProgressBar;
 class QPushButton;
 class QStackedWidget;
 class QTimer;
@@ -58,8 +59,8 @@ private:
 	QWidget *buildLedsPage();
 	QWidget *buildKeysPage();
 	QWidget *buildOtaPage();
-	QPushButton *makeHomeCard(const QString &title, QLabel **summaryOut,
-				  const char *accent);
+	PixelShell *makeHomeCard(PixelGlyph glyph, const QString &title,
+				 QLabel **summaryOut, const char *accent);
 	void applyDarkStyle(QWidget *w);
 	void refreshApLabels();
 	void refreshIcmLabels();
@@ -95,7 +96,7 @@ private:
 	QLabel *keyDetail_ = nullptr;
 	QLabel *otaDetail_ = nullptr;
 	QLabel *otaProgressLabel_ = nullptr;
-	QProgressBar *otaProgressBar_ = nullptr;
+	PixelProgressBar *otaProgressBar_ = nullptr;
 	QPushButton *otaPullBtn_ = nullptr;
 	QProcess *otaPullProc_ = nullptr;
 	QTimer *homeTimer_ = nullptr;
