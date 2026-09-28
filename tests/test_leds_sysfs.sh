@@ -3,6 +3,8 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 src="$root/meta-alientek/recipes-apps/board-ui/dashboard/files/src/hw/leds"
+sysfs_src="$root/meta-alientek/recipes-apps/board-ui/dashboard/files/src/hw/sysfs"
+src_root="$root/meta-alientek/recipes-apps/board-ui/dashboard/files/src"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -28,31 +30,33 @@ static void fail(const char *m)
 int main(int argc, char **argv)
 {
 	QCoreApplication app(argc, argv);
-	const QString root = QString::fromUtf8("$fake");
-	LedStatus st;
-	if (!ledReadStatus(root, QStringLiteral("alientek-led0"), &st) || !st.ok)
+	LedController leds(QString::fromUtf8("$fake"));
+	leds.bindLed(QStringLiteral("alientek-led0"));
+
+	const LedStatus st = leds.ledStatus();
+	if (!st.ok)
 		fail("read");
 	if (st.trigger != QStringLiteral("heartbeat"))
 		fail("parse trigger");
-	if (!ledSetManual(root, QStringLiteral("alientek-led0"), false))
+	if (!leds.ledOff())
 		fail("off");
-	QFile t(root + QStringLiteral("/alientek-led0/trigger"));
+	QFile t(QString::fromUtf8("$fake/alientek-led0/trigger"));
 	t.open(QIODevice::ReadOnly);
 	if (QString::fromUtf8(t.readAll()).trimmed() != QStringLiteral("none"))
 		fail("trigger none");
 	t.close();
-	QFile b(root + QStringLiteral("/alientek-led0/brightness"));
+	QFile b(QString::fromUtf8("$fake/alientek-led0/brightness"));
 	b.open(QIODevice::ReadOnly);
 	if (QString::fromUtf8(b.readAll()).trimmed() != QStringLiteral("0"))
 		fail("brightness 0");
 	b.close();
-	if (!ledSetManual(root, QStringLiteral("alientek-led0"), true))
+	if (!leds.ledOn())
 		fail("on");
 	b.open(QIODevice::ReadOnly);
 	if (QString::fromUtf8(b.readAll()).trimmed() != QStringLiteral("1"))
 		fail("brightness 1");
 	b.close();
-	if (!ledRestoreHeartbeat(root, QStringLiteral("alientek-led0")))
+	if (!leds.ledHeartbeat())
 		fail("heartbeat");
 	t.open(QIODevice::ReadOnly);
 	if (QString::fromUtf8(t.readAll()).trimmed() != QStringLiteral("heartbeat"))
@@ -70,5 +74,6 @@ fi
 
 CXXFLAGS="$(pkg-config --cflags Qt6Core 2>/dev/null || true)"
 LIBS="$(pkg-config --libs Qt6Core 2>/dev/null || echo '-lQt6Core')"
-g++ -std=c++17 -fPIC $CXXFLAGS -I"$src" -o "$tmp/t" "$tmp/test_leds.cpp" "$src/leds.cpp" $LIBS
+g++ -std=c++17 -fPIC $CXXFLAGS -I"$src" -I"$src_root" -o "$tmp/t" \
+	"$tmp/test_leds.cpp" "$src/leds.cpp" "$sysfs_src/sysfs_file.cpp" $LIBS
 "$tmp/t"

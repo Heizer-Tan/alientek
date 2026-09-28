@@ -1,11 +1,13 @@
 /* SPDX-License-Identifier: MIT */
 #pragma once
 
+#include "hw/leds/leds.hpp"
 #include "ui/style/pixel_widgets.hpp"
 
 #include <QProcess>
 #include <QString>
 #include <QWidget>
+#include <memory>
 
 class QLabel;
 class QPushButton;
@@ -74,13 +76,11 @@ private:
 	QString apDev_;
 	QString icmName_;
 	QString iface_;
-	QString ledName_;
-	QString beepName_;
-	QString ledsRoot_;
 	QString otaPullMsg_;
 	QString otaStdoutBuf_;
 	int otaProgressHighWater_ = 0;
 
+	std::unique_ptr<LedController> leds_;
 	QStackedWidget *stack_ = nullptr;
 	QLabel *homeApSummary_ = nullptr;
 	QLabel *homeIcmSummary_ = nullptr;

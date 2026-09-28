@@ -28,6 +28,8 @@ SRC_URI = " \
     file://src/hw/sensors/sensors.hpp \
     file://src/hw/leds/leds.cpp \
     file://src/hw/leds/leds.hpp \
+    file://src/hw/sysfs/sysfs_file.cpp \
+    file://src/hw/sysfs/sysfs_file.hpp \
     file://src/sys/sysinfo/sysinfo.cpp \
     file://src/sys/sysinfo/sysinfo.hpp \
     file://src/sys/ota/ota_status.cpp \

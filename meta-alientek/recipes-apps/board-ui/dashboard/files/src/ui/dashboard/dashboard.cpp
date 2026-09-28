@@ -124,9 +124,10 @@ Dashboard::Dashboard(const QString &apDev, const QString &icmName,
 		     const QString &beepName, int homeMs, int detailMs,
 		     QWidget *parent)
 	: QWidget(parent), apDev_(apDev), icmName_(icmName), iface_(iface),
-	  ledName_(ledName), beepName_(beepName),
-	  ledsRoot_(QStringLiteral("/sys/class/leds"))
+	  leds_(std::make_unique<LedController>())
 {
+	leds_->bindLed(ledName);
+	leds_->bindBeep(beepName);
 	applyDarkStyle(this);
 	auto *lay = new QVBoxLayout(this);
 	lay->setContentsMargins(0, 0, 0, 0);
@@ -628,12 +629,10 @@ void Dashboard::refreshSysLabels()
 
 void Dashboard::refreshLedLabels()
 {
-	LedStatus led{};
-	LedStatus beep{};
-	const bool ledOk = ledReadStatus(ledsRoot_, ledName_, &led);
-	const bool beepOk = ledReadStatus(ledsRoot_, beepName_, &beep);
+	const LedStatus led = leds_->ledStatus();
+	const LedStatus beep = leds_->beepStatus();
 	QString home = QString::fromUtf8("?");
-	if (ledOk) {
+	if (led.ok) {
 		if (led.trigger == QStringLiteral("heartbeat"))
 			home = QString::fromUtf8("HEART");
 		else
@@ -642,23 +641,23 @@ void Dashboard::refreshLedLabels()
 	}
 	homeLedSummary_->setText(home);
 	ledDetail_->setText(
-		padDots(QString::fromUtf8("LED"), ledName_) +
+		padDots(QString::fromUtf8("LED"), leds_->ledName()) +
 		QLatin1Char('\n') +
 		padDots(QString::fromUtf8("LED_TRIG"),
-			ledOk ? led.trigger : QString::fromUtf8("N/A")) +
+			led.ok ? led.trigger : QString::fromUtf8("N/A")) +
 		QLatin1Char('\n') +
 		padDots(QString::fromUtf8("LED_BRIGHT"),
-			ledOk ? QString::number(led.brightness)
-			      : QString::fromUtf8("-")) +
+			led.ok ? QString::number(led.brightness)
+			       : QString::fromUtf8("-")) +
 		QLatin1Char('\n') +
-		padDots(QString::fromUtf8("BEEP"), beepName_) +
+		padDots(QString::fromUtf8("BEEP"), leds_->beepName()) +
 		QLatin1Char('\n') +
 		padDots(QString::fromUtf8("BEEP_TRIG"),
-			beepOk ? beep.trigger : QString::fromUtf8("N/A")) +
+			beep.ok ? beep.trigger : QString::fromUtf8("N/A")) +
 		QLatin1Char('\n') +
 		padDots(QString::fromUtf8("BEEP_BRIGHT"),
-			beepOk ? QString::number(beep.brightness)
-			       : QString::fromUtf8("-")));
+			beep.ok ? QString::number(beep.brightness)
+				: QString::fromUtf8("-")));
 }
 
 void Dashboard::refreshOtaLabels()
@@ -854,7 +853,7 @@ void Dashboard::backHome()
 
 void Dashboard::onLedOn()
 {
-	if (!ledSetManual(ledsRoot_, ledName_, true))
+	if (!leds_->ledOn())
 		ledDetail_->setText(QString::fromUtf8("FAIL: LED ON"));
 	else
 		refreshLedLabels();
@@ -862,7 +861,7 @@ void Dashboard::onLedOn()
 
 void Dashboard::onLedOff()
 {
-	if (!ledSetManual(ledsRoot_, ledName_, false))
+	if (!leds_->ledOff())
 		ledDetail_->setText(QString::fromUtf8("FAIL: LED OFF"));
 	else
 		refreshLedLabels();
@@ -870,7 +869,7 @@ void Dashboard::onLedOff()
 
 void Dashboard::onLedHeartbeat()
 {
-	if (!ledRestoreHeartbeat(ledsRoot_, ledName_))
+	if (!leds_->ledHeartbeat())
 		ledDetail_->setText(QString::fromUtf8("FAIL: HEARTBEAT"));
 	else
 		refreshLedLabels();
@@ -878,7 +877,7 @@ void Dashboard::onLedHeartbeat()
 
 void Dashboard::onBeepOn()
 {
-	if (!ledSetManual(ledsRoot_, beepName_, true))
+	if (!leds_->beepOn())
 		ledDetail_->setText(QString::fromUtf8("FAIL: BEEP ON"));
 	else
 		refreshLedLabels();
@@ -886,7 +885,7 @@ void Dashboard::onBeepOn()
 
 void Dashboard::onBeepOff()
 {
-	if (!ledSetManual(ledsRoot_, beepName_, false))
+	if (!leds_->beepOff())
 		ledDetail_->setText(QString::fromUtf8("FAIL: BEEP OFF"));
 	else
 		refreshLedLabels();
