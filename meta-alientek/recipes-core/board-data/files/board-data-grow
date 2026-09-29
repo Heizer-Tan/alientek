@@ -1,0 +1,90 @@
+#!/bin/sh
+# 将 LABEL=data 分区扩展到磁盘末尾并 resize2fs（已满则跳过）
+set -eu
+
+logMsg() {
+	logger -t board-data-grow "$1" 2>/dev/null || true
+	printf '%s\n' "$1"
+}
+
+# /dev/mmcblk0p4 → disk=/dev/mmcblk0 partnum=4
+parseMmcPart() {
+	part="$1"
+	case "${part}" in
+	/dev/mmcblk*p[0-9]*)
+		DISK="${part%p*}"
+		PARTNUM="${part##*p}"
+		return 0
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
+# 分区结束到磁盘末尾是否 ≥ 8MiB
+hasFreeAfterPart() {
+	disk="$1"
+	partnum="$2"
+	free_b="$(parted -s -m "${disk}" unit B print 2>/dev/null | awk -F: -v pn="${partnum}" '
+		NR == 2 {
+			gsub(/B/, "", $2)
+			disk_end = $2 + 0
+		}
+		$1 == pn {
+			gsub(/B/, "", $3)
+			part_end = $3 + 0
+		}
+		END {
+			if (disk_end > part_end)
+				print int(disk_end - part_end)
+			else
+				print 0
+		}
+	')"
+	[ -n "${free_b}" ] || free_b=0
+	[ "${free_b}" -ge 8388608 ]
+}
+
+resolveDataPart() {
+	if command -v blkid >/dev/null 2>&1; then
+		blkid -L data 2>/dev/null && return 0
+	fi
+	if command -v findfs >/dev/null 2>&1; then
+		findfs LABEL=data 2>/dev/null && return 0
+	fi
+	return 1
+}
+
+main() {
+	if ! command -v parted >/dev/null 2>&1; then
+		logMsg "无 parted，跳过"
+		return 0
+	fi
+	if ! command -v resize2fs >/dev/null 2>&1; then
+		logMsg "无 resize2fs，跳过"
+		return 0
+	fi
+
+	part="$(resolveDataPart || true)"
+	if [ -z "${part}" ]; then
+		logMsg "未找到 LABEL=data，跳过"
+		return 0
+	fi
+	if ! parseMmcPart "${part}"; then
+		logMsg "暂不支持的设备节点: ${part}"
+		return 0
+	fi
+
+	if ! hasFreeAfterPart "${DISK}" "${PARTNUM}"; then
+		logMsg "data 后空闲不足，无需扩展 (${part})"
+		return 0
+	fi
+
+	logMsg "扩展 ${part} → ${DISK} 末尾 (partition ${PARTNUM})"
+	parted -s "${DISK}" resizepart "${PARTNUM}" 100%
+	resize2fs "${part}"
+	logMsg "data 分区扩展完成"
+}
+
+main "$@"

@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+//
+// 切回 gpio-leds 控制板载 LED（禁用 /dev/alientek-led 对应节点）。
+// U-Boot：fdtfile=imx6ull-alientek-alpha-gpioleds.dtb
+
+/dts-v1/;
+
+#include "imx6ull-alientek-alpha.dts"
+
+&imx_alientek_led {
+	status = "disabled";
+};
+
+&alientek_gpio_leds {
+	pinctrl-0 = <&pinctrl_beep &pinctrl_alientek_led>;
+};
+
+&alientek_led0 {
+	status = "okay";
+};

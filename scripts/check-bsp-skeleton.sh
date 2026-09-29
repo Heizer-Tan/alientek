@@ -99,9 +99,8 @@ if [[ -f "$cmd" ]]; then
   grep -q "mmcboot" "$cmd" || fail "boot.cmd 缺少 mmcboot"
   grep -q "netboot" "$cmd" || fail "boot.cmd 缺少 netboot"
   grep -q "imx6ull-alientek-alpha.dtb" "$cmd" || fail "boot.cmd 未加载 imx6ull-alientek-alpha.dtb"
-  grep -q 'setenv fdt_file imx6ull-alientek-alpha.dtb' "$cmd" \
-    || fail "boot.cmd 未同步 EVK 变量 fdt_file"
-  grep -q '^run mmcboot$' "$cmd" || fail "boot.cmd 末尾未执行 run mmcboot"
+  grep -qE 'fdt_file' "$cmd" || fail "boot.cmd 未同步 EVK 变量 fdt_file"
+  grep -qE '^(run mmcboot|bootmenu)$' "$cmd" || fail "boot.cmd 末尾未执行 run mmcboot/bootmenu"
 fi
 
 defcfg="$root/meta-alientek/recipes-bsp/bootloader/u-boot/u-boot/mx6ull_aes_defconfig"

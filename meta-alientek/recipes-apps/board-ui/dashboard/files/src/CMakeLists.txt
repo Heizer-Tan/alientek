@@ -14,7 +14,7 @@ add_executable(dashboard
 	ui/dashboard/dashboard.cpp
 	ui/style/pixel_widgets.cpp
 	hw/sensors/sensors.cpp
-	hw/leds/leds.cpp
+	hw/leds/led_class_controller.cpp
 	hw/sysfs/sysfs_file.cpp
 	sys/sysinfo/sysinfo.cpp
 	sys/ota/ota_status.cpp

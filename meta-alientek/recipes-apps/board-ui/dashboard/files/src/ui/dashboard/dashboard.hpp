@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 #pragma once
 
-#include "hw/leds/leds.hpp"
+#include "hw/leds/led_class_controller.hpp"
 #include "ui/style/pixel_widgets.hpp"
 
 #include <QProcess>

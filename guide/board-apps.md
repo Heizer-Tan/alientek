@@ -54,18 +54,47 @@ icm20608-read -w
 
 静止时 `az_g` 约 ±1g，角速度接近 0。历史数据见下方 Web「六轴」页。`ls /dev/icm20608` 应失败（已硬切掉 misc）。
 
+## 板载 LED（chardev / gpio-leds）
+
+默认设备树启用 `imx_alientek_led`（`compatible = "alientek,led"`），模块 `alientek-led` 导出 **`/dev/alientek-led`**；蜂鸣器仍走 `gpio-leds` 的 `beep`。`alientek_led0` 与 `alientekdtsled` 默认关闭（同脚 GPIO1_IO03）。
+
+```bash
+lsmod | grep alientek_led
+echo 1 > /dev/alientek-led   # 亮
+echo 0 > /dev/alientek-led   # 灭
+cat /dev/alientek-led        # 0 / 1
+```
+
+切回 **sysfs gpio-leds**（含 heartbeat）：启动分区需有 `imx6ull-alientek-alpha-gpioleds.dtb`。推荐用持久分区上的脚本（或 `/usr/sbin` 封装）：
+
+```bash
+switch-led-dtb gpioleds    # → gpio-leds DTB
+switch-led-dtb chardev     # → 默认 /dev/alientek-led
+switch-led-dtb status
+reboot
+```
+
+脚本实体在 `/data/bin/switch-led-dtb`（`LABEL=data`，A/B OTA 不覆盖）。等价手动：
+
+```bash
+fw_setenv fdtfile imx6ull-alientek-alpha-gpioleds.dtb
+fw_setenv fdt_file imx6ull-alientek-alpha-gpioleds.dtb
+```
+
+切回后应有 `/sys/class/leds/alientek-led0`，且无 `/dev/alientek-led`。Dashboard 会**自动探测**：有字符设备则走 chardev（隐藏 HEARTBEAT）；否则走 `DASHBOARD_LED_NAME`（默认 `alientek-led0`）。
+
 ## LCD 板级控制台
 
 镜像含 `dashboard`（**Qt6 Widgets + linuxfb** `/dev/fb0` + evdev/Goodix 触摸），开机自启。视觉为**黑底荧光绿终端风**（等宽字、细线框、点线对齐）。主页 **2×3** 入口：
 
 - 光感 AP3216C / 六轴 ICM20608（详情页）
 - 系统信息（IP、运行时间、内存、负载）
-- 灯控（LED 开/关/恢复呼吸灯，蜂鸣器开/关）
+- 灯控（LED 开/关；gpio-leds 模式下另有呼吸灯；蜂鸣器开/关）
 - 按键状态（`gpio-key`）
 - OTA 只读槽位（`fw_printenv`）；详情页可「拉取最新并升级」（`ota-agent --pull-latest`，见 [ota-swupdate.md](./ota-swupdate.md)）
 
 手动：`/etc/init.d/dashboard start|stop`  
-可选环境变量见 `/etc/default/dashboard`（如 `DASHBOARD_IFACE`、`DASHBOARD_LED_NAME`、`QT_QPA_PLATFORM`）。
+可选环境变量见 `/etc/default/dashboard`（如 `DASHBOARD_IFACE`、`DASHBOARD_LED_DEV`、`DASHBOARD_LED_NAME`、`QT_QPA_PLATFORM`）。
 
 需确认 `ls -l /dev/fb0`，触摸为 Goodix event 节点。
 

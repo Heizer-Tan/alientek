@@ -15,6 +15,7 @@ RDEPENDS:${PN} = " \
     i2c-tools \
     libubootenv-bin \
     ap3216c-module \
+    alientek-led-module \
     ap3216c-logger \
     icm20608-module \
     icm20608-logger \
@@ -23,6 +24,7 @@ RDEPENDS:${PN} = " \
     busybox-hwclock \
     webserver \
     board-update-tools \
+    board-data \
     ota-agent \
     mqtt-agent \
     swupdate \

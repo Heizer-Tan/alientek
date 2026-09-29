@@ -2,7 +2,7 @@
 #include "dashboard.hpp"
 
 #include "hw/keys/keys.hpp"
-#include "hw/leds/leds.hpp"
+#include "hw/leds/led_class_controller.hpp"
 #include "hw/sensors/sensors.hpp"
 #include "sys/ota/ota_status.hpp"
 #include "sys/sysinfo/sysinfo.hpp"
@@ -126,7 +126,11 @@ Dashboard::Dashboard(const QString &apDev, const QString &icmName,
 	: QWidget(parent), apDev_(apDev), icmName_(icmName), iface_(iface),
 	  leds_(std::make_unique<LedClassController>())
 {
-	leds_->bindLed(ledName);
+	QString charDev = QStringLiteral("/dev/alientek-led");
+	const QByteArray envDev = qgetenv("DASHBOARD_LED_DEV");
+	if (!envDev.isEmpty())
+		charDev = QString::fromUtf8(envDev);
+	leds_->bindLed(ledName, charDev);
 	leds_->bindBeep(beepName);
 	applyDarkStyle(this);
 	auto *lay = new QVBoxLayout(this);
@@ -394,6 +398,8 @@ QWidget *Dashboard::buildLedsPage()
 		b->setMaximumHeight(46);
 		noFocus(b);
 	}
+	/* chardev 无 LED trigger，隐藏 heartbeat */
+	ledHb->setVisible(leds_->supportsHeartbeat());
 	connect(ledOn, &QPushButton::clicked, this, &Dashboard::onLedOn);
 	connect(ledOff, &QPushButton::clicked, this, &Dashboard::onLedOff);
 	connect(ledHb, &QPushButton::clicked, this, &Dashboard::onLedHeartbeat);
@@ -869,6 +875,10 @@ void Dashboard::onLedOff()
 
 void Dashboard::onLedHeartbeat()
 {
+	if (!leds_->supportsHeartbeat()) {
+		ledDetail_->setText(QString::fromUtf8("N/A: chardev LED"));
+		return;
+	}
 	if (!leds_->ledHeartbeat())
 		ledDetail_->setText(QString::fromUtf8("FAIL: HEARTBEAT"));
 	else

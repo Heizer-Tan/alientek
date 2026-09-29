@@ -15,7 +15,7 @@ echo 1 >"$fake/alientek-led0/brightness"
 echo 1 >"$fake/alientek-led0/max_brightness"
 
 cat >"$tmp/test_leds.cpp" <<EOF
-#include "leds.hpp"
+#include "led_class_controller.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <QCoreApplication>
@@ -75,5 +75,5 @@ fi
 CXXFLAGS="$(pkg-config --cflags Qt6Core 2>/dev/null || true)"
 LIBS="$(pkg-config --libs Qt6Core 2>/dev/null || echo '-lQt6Core')"
 g++ -std=c++17 -fPIC $CXXFLAGS -I"$src" -I"$src_root" -o "$tmp/t" \
-	"$tmp/test_leds.cpp" "$src/leds.cpp" "$sysfs_src/sysfs_file.cpp" $LIBS
+	"$tmp/test_leds.cpp" "$src/led_class_controller.cpp" "$sysfs_src/sysfs_file.cpp" $LIBS
 "$tmp/t"

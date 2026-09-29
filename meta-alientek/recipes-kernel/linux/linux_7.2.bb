@@ -26,12 +26,14 @@ KERNEL_EXTRA_ARGS += "LOADADDR=${UBOOT_ENTRYPOINT}"
 ALIENTK_BOARD_CFG = "${THISDIR}/${PN}/board.cfg"
 ALIENTK_TOUCH_CFG = "${THISDIR}/${PN}/touch.cfg"
 ALIENTK_DTS = "${THISDIR}/../../recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dts"
+ALIENTK_DTS_GPIOLEDS = "${THISDIR}/../../recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha-gpioleds.dts"
 ALIENTK_DTSI = "${THISDIR}/../../recipes-bsp/device-tree/alientek-aes/imx6ull-alientek-alpha.dtsi"
 
 do_configure[file-checksums] += "\
     ${ALIENTK_BOARD_CFG}:True \
     ${ALIENTK_TOUCH_CFG}:True \
     ${ALIENTK_DTS}:True \
+    ${ALIENTK_DTS_GPIOLEDS}:True \
     ${ALIENTK_DTSI}:True \
 "
 
@@ -47,14 +49,26 @@ do_configure:prepend() {
 
     dts_dir="${S}/arch/arm/boot/dts/nxp/imx"
     install -D -m 0644 ${ALIENTK_DTS} ${dts_dir}/imx6ull-alientek-alpha.dts
+    install -D -m 0644 ${ALIENTK_DTS_GPIOLEDS} ${dts_dir}/imx6ull-alientek-alpha-gpioleds.dts
     install -D -m 0644 ${ALIENTK_DTSI} ${dts_dir}/imx6ull-alientek-alpha.dtsi
     mk="${dts_dir}/Makefile"
     if [ ! -f "${mk}" ]; then
         die "未找到 ${mk}，Linux 7.2 DTS 布局已变"
     fi
     if ! grep -q 'imx6ull-alientek-alpha.dtb' "${mk}"; then
-        awk '{print} /imx6ull-14x14-evk\.dtb/ && !done {print "\timx6ull-alientek-alpha.dtb \\"; done=1}' \
-            "${mk}" > "${mk}.tmp" && mv "${mk}.tmp" "${mk}"
+        awk '{print} /imx6ull-14x14-evk\.dtb/ && !done {
+            print "\timx6ull-alientek-alpha.dtb \\";
+            print "\timx6ull-alientek-alpha-gpioleds.dtb \\";
+            done=1
+        }' "${mk}" > "${mk}.tmp" && mv "${mk}.tmp" "${mk}"
+    elif ! grep -q 'imx6ull-alientek-alpha-gpioleds.dtb' "${mk}"; then
+        awk '{
+            print
+            if ($0 ~ /imx6ull-alientek-alpha\.dtb/ && !done) {
+                print "\timx6ull-alientek-alpha-gpioleds.dtb \\"
+                done=1
+            }
+        }' "${mk}" > "${mk}.tmp" && mv "${mk}.tmp" "${mk}"
     fi
 }
 

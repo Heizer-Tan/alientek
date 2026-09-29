@@ -1,0 +1,10 @@
+#!/bin/sh
+# rootfs 内薄封装：data 未挂载时提示
+set -eu
+REAL="/data/bin/switch-led-dtb"
+if [ ! -x "${REAL}" ]; then
+	printf '错误: %s 不可用（data 分区未挂载？试: mount LABEL=data /data）\n' \
+		"${REAL}" >&2
+	exit 1
+fi
+exec "${REAL}" "$@"

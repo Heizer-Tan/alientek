@@ -1,0 +1,62 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          board-data
+# Required-Start:    $local_fs
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:
+# Short-Description: 挂载/扩展 data 分区并确保 switch-led-dtb 可用
+### END INIT INFO
+
+set -eu
+
+SEED="/usr/share/board-data/switch-led-dtb"
+TARGET="/data/bin/switch-led-dtb"
+
+logMsg() {
+	logger -t board-data "$1" 2>/dev/null || true
+	printf '%s\n' "$1"
+}
+
+ensureMount() {
+	mkdir -p /data
+	if mountpoint -q /data 2>/dev/null; then
+		return 0
+	fi
+	if blkid -L data >/dev/null 2>&1; then
+		if mount LABEL=data /data 2>/dev/null; then
+			return 0
+		fi
+		mount /data 2>/dev/null || true
+	fi
+}
+
+ensureScript() {
+	if [ -x "${TARGET}" ]; then
+		return 0
+	fi
+	if [ ! -f "${SEED}" ]; then
+		return 0
+	fi
+	mkdir -p /data/bin
+	cp -f "${SEED}" "${TARGET}"
+	chmod 0755 "${TARGET}"
+	logMsg "已从 seed 恢复 ${TARGET}"
+}
+
+case "${1:-}" in
+	start)
+		ensureMount
+		if [ -x /usr/sbin/board-data-grow ]; then
+			/usr/sbin/board-data-grow || logMsg "board-data-grow 失败（忽略）"
+		fi
+		ensureScript
+		;;
+	stop|restart|reload)
+		exit 0
+		;;
+	*)
+		printf '用法: %s {start|stop|restart|reload}\n' "$0" >&2
+		exit 1
+		;;
+esac

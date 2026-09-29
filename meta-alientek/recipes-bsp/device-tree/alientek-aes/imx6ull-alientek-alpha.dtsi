@@ -183,18 +183,23 @@
 		};
 	};
 
-	/* 教程外设（自写 platform 驱动，从 16/15/17 章提到默认启用）*/
-	imx_alientek_led {
+	/*
+	 * 板载 LED（GPIO1_IO03）：默认走 chardev 驱动 alientek-led → /dev/alientek-led。
+	 * 与 gpio-leds 的 alientek_led0、alientekdtsled 互斥；切回 gpio-leds 用
+	 * imx6ull-alientek-alpha-gpioleds.dtb。
+	 */
+	imx_alientek_led: imx_alientek_led {
 		compatible = "alientek,led";
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_alientek_led>;
-		status = "disabled";   /* 本章实验期间 */
+		status = "okay";
 		led-gpio = <&gpio1 3 GPIO_ACTIVE_LOW>;
 	};
 
-    alientekdtsled {
+	/* 裸机/寄存器教程用；与 LED 同脚，默认关闭 */
+	alientekdtsled: alientekdtsled {
 		compatible = "alientek,dtsled";
-		status = "okay";
+		status = "disabled";
 		#address-cells = <1>;
 		#size-cells = <1>;
 		reg = <0x020C406C 0x04   /* CCM_CCGR1 */
@@ -216,16 +221,18 @@
 		};
 	};
 
-	/* 与 imx_alientek_led 同脚 GPIO1_IO03，二者只能启用其一 */
-	alientek_gpio_leds {
+	/*
+	 * 默认只挂蜂鸣器：pinctrl 不含 LED 脚，避免与 imx_alientek_led 抢 GPIO1_IO03。
+	 * gpioleds 变体 DTB 会把 LED 子节点与 LED pinctrl 再打开。
+	 */
+	alientek_gpio_leds: alientek_gpio_leds {
 		compatible = "gpio-leds";
 		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_beep &pinctrl_alientek_led>;
+		pinctrl-0 = <&pinctrl_beep>;
 		status = "okay";
 
-		/* disabled：不注册 /sys/class/leds/alientek-led0，节点保留便于以后启用 */
-		alientek_led0 {
-			status = "okay";
+		alientek_led0: alientek_led0 {
+			status = "disabled";
 			label = "alientek-led0";
 			gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
 			default-state = "on";

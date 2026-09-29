@@ -12,6 +12,9 @@
 - `u-boot`：原始写入 TF 卡前部
 - `boot`：FAT，共享启动文件
 - `rootfsA` / `rootfsB`：当前槽位或候选槽位
+- `data`（`LABEL=data` → `/data`）：持久区；**不在 `.swu` 内**，A/B OTA 不覆盖。镜像初值约 64MiB，首启 `board-data-grow` 可扩到盘尾
+
+LED DTB 切换脚本：`/data/bin/switch-led-dtb`（或 `/usr/sbin/switch-led-dtb`）。
 
 ## 构建 `.swu`
 

@@ -9,6 +9,7 @@ RDEPENDS:${PN} = " \
     qtbase \
     qtbase-plugins \
     ap3216c-module \
+    alientek-led-module \
     icm20608-module \
     ttf-wqy-microhei \
     libubootenv-bin \
@@ -26,8 +27,8 @@ SRC_URI = " \
     file://src/ui/dashboard/dashboard.hpp \
     file://src/hw/sensors/sensors.cpp \
     file://src/hw/sensors/sensors.hpp \
-    file://src/hw/leds/leds.cpp \
-    file://src/hw/leds/leds.hpp \
+    file://src/hw/leds/led_class_controller.cpp \
+    file://src/hw/leds/led_class_controller.hpp \
     file://src/hw/sysfs/sysfs_file.cpp \
     file://src/hw/sysfs/sysfs_file.hpp \
     file://src/sys/sysinfo/sysinfo.cpp \

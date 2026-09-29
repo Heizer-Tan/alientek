@@ -1,0 +1,37 @@
+#!/bin/sh
+# 切换板载 LED 所用 DTB（写 U-Boot 环境，重启生效）
+set -eu
+
+CHARDEV_DTB="imx6ull-alientek-alpha.dtb"
+GPIOLEDS_DTB="imx6ull-alientek-alpha-gpioleds.dtb"
+
+usage() {
+	printf '用法: %s {chardev|gpioleds|status}\n' "${0##*/}" >&2
+	printf '  chardev  — /dev/alientek-led（默认）\n' >&2
+	printf '  gpioleds — /sys/class/leds/alientek-led0 + heartbeat\n' >&2
+	printf '  status   — 打印当前 fdtfile\n' >&2
+	exit 1
+}
+
+setFdt() {
+	dtb="$1"
+	fw_setenv fdtfile "${dtb}"
+	fw_setenv fdt_file "${dtb}"
+	printf '已设置 fdtfile=%s ，请 reboot 后生效\n' "${dtb}"
+}
+
+case "${1:-}" in
+	chardev|default)
+		setFdt "${CHARDEV_DTB}"
+		;;
+	gpioleds)
+		setFdt "${GPIOLEDS_DTB}"
+		;;
+	status)
+		printf 'fdtfile=%s\n' "$(fw_printenv -n fdtfile 2>/dev/null || echo unset)"
+		printf 'fdt_file=%s\n' "$(fw_printenv -n fdt_file 2>/dev/null || echo unset)"
+		;;
+	*)
+		usage
+		;;
+esac

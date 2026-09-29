@@ -123,6 +123,7 @@ bootz → Linux（当前默认 7.2.4）
 | 卡前部 raw | `u-boot.imx` |
 | `boot`（FAT） | `zImage`、`imx6ull-alientek-alpha.dtb`、`boot.scr` |
 | `rootfsA` / `rootfsB` | 根文件系统（A/B） |
+| `data`（ext4） | 持久数据（`/data`）；OTA 不覆盖，可扩到盘尾 |
 
 `boot.scr` 由 `meta-alientek/recipes-bsp/bootloader/u-boot/u-boot/boot.cmd` 编译而来，是 U-Boot 实际执行的脚本。
 
