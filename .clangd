@@ -1,0 +1,11 @@
+# dashboard / 全仓 clangd：去掉 Yocto GCC 专用参数（若数据库里残留）
+CompileFlags:
+  Remove:
+    - -fcanon-prefix-map
+    - -fmacro-prefix-map=*
+    - -fdebug-prefix-map=*
+    - --sysroot=*
+    - -mthumb
+    - -mfpu=*
+    - -mfloat-abi=*
+    - -mcpu=*

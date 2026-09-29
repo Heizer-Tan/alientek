@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT */
-/* LED/beep：LedController 管理 /sys/class/leds/<name> 节点 */
+/* LED/beep：LedClassController 管理 /sys/class/leds/<name> 节点 */
 
 #include "leds.hpp"
 
@@ -20,7 +20,7 @@ QString parseActiveTrigger(const QString &raw)
 } // namespace
 
 /* 单个 sysfs LED 节点 */
-class LedController::Device final {
+class LedClassController::Device final {
 public:
 	Device(QString sysfsRoot, QString name)
 		: sysfsRoot_(std::move(sysfsRoot)), name_(std::move(name))
@@ -84,64 +84,64 @@ private:
 	QString name_;
 };
 
-LedController::LedController(QString sysfsRoot)
+LedClassController::LedClassController(QString sysfsRoot)
 	: sysfsRoot_(std::move(sysfsRoot))
 {
 }
 
-LedController::~LedController() = default;
+LedClassController::~LedClassController() = default;
 
-void LedController::bindLed(const QString &name)
+void LedClassController::bindLed(const QString &name)
 {
 	led_ = std::make_unique<Device>(sysfsRoot_, name);
 }
 
-void LedController::bindBeep(const QString &name)
+void LedClassController::bindBeep(const QString &name)
 {
 	beep_ = std::make_unique<Device>(sysfsRoot_, name);
 }
 
-QString LedController::ledName() const
+QString LedClassController::ledName() const
 {
 	return led_ ? led_->name() : QString();
 }
 
-QString LedController::beepName() const
+QString LedClassController::beepName() const
 {
 	return beep_ ? beep_->name() : QString();
 }
 
-LedStatus LedController::ledStatus() const
+LedStatus LedClassController::ledStatus() const
 {
 	return led_ ? led_->status() : LedStatus{};
 }
 
-LedStatus LedController::beepStatus() const
+LedStatus LedClassController::beepStatus() const
 {
 	return beep_ ? beep_->status() : LedStatus{};
 }
 
-bool LedController::ledOn()
+bool LedClassController::ledOn()
 {
 	return led_ && led_->setManual(true);
 }
 
-bool LedController::ledOff()
+bool LedClassController::ledOff()
 {
 	return led_ && led_->setManual(false);
 }
 
-bool LedController::ledHeartbeat()
+bool LedClassController::ledHeartbeat()
 {
 	return led_ && led_->setHeartbeat();
 }
 
-bool LedController::beepOn()
+bool LedClassController::beepOn()
 {
 	return beep_ && beep_->setManual(true);
 }
 
-bool LedController::beepOff()
+bool LedClassController::beepOff()
 {
 	return beep_ && beep_->setManual(false);
 }

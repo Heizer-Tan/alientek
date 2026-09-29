@@ -30,7 +30,7 @@ static void fail(const char *m)
 int main(int argc, char **argv)
 {
 	QCoreApplication app(argc, argv);
-	LedController leds(QString::fromUtf8("$fake"));
+	LedClassController leds(QString::fromUtf8("$fake"));
 	leds.bindLed(QStringLiteral("alientek-led0"));
 
 	const LedStatus st = leds.ledStatus();

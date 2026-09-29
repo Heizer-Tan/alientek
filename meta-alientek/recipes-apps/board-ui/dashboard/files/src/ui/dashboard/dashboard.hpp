@@ -80,7 +80,7 @@ private:
 	QString otaStdoutBuf_;
 	int otaProgressHighWater_ = 0;
 
-	std::unique_ptr<LedController> leds_;
+	std::unique_ptr<LedClassController> leds_;
 	QStackedWidget *stack_ = nullptr;
 	QLabel *homeApSummary_ = nullptr;
 	QLabel *homeIcmSummary_ = nullptr;

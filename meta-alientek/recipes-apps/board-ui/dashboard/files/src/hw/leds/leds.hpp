@@ -13,17 +13,17 @@ struct LedStatus {
 };
 
 /*
- * 板级 LED/蜂鸣器控制器：对外唯一入口。
+ * Linux LED class 控制器（灯 + 蜂鸣器节点）：对外唯一入口。
  * 内部用 Device 封装单个 /sys/class/leds/<name> 节点。
  */
-class LedController final {
+class LedClassController final {
 public:
-	explicit LedController(
+	explicit LedClassController(
 		QString sysfsRoot = QStringLiteral("/sys/class/leds"));
-	~LedController();
+	~LedClassController();
 
-	LedController(const LedController &) = delete;
-	LedController &operator=(const LedController &) = delete;
+	LedClassController(const LedClassController &) = delete;
+	LedClassController &operator=(const LedClassController &) = delete;
 
 	/* 绑定 LED / 蜂鸣器节点名（可重复调用以更换） */
 	void bindLed(const QString &name);

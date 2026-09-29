@@ -124,7 +124,7 @@ Dashboard::Dashboard(const QString &apDev, const QString &icmName,
 		     const QString &beepName, int homeMs, int detailMs,
 		     QWidget *parent)
 	: QWidget(parent), apDev_(apDev), icmName_(icmName), iface_(iface),
-	  leds_(std::make_unique<LedController>())
+	  leds_(std::make_unique<LedClassController>())
 {
 	leds_->bindLed(ledName);
 	leds_->bindBeep(beepName);

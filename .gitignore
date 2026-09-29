@@ -16,5 +16,11 @@ meta-swupdate/
 __pycache__/
 .worktrees/
 .superpowers/
+# clangd：本机生成的编译数据库（含绝对路径，不入库）
+/compile_commands.json
+meta-alientek/recipes-apps/board-ui/dashboard/files/src/compile_commands.json
 # 设计/计划 Markdown：本地可留，不入库
 meta-alientek/**/docs/
+
+# clangd 索引缓存
+**/.cache/
