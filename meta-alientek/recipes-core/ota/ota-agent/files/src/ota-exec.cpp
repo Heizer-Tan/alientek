@@ -98,10 +98,10 @@ static int readEnvironmentValue(const char *name, char *value,
     return waitForCommand(pid, "fw_printenv", errorBuf, errorBufSize);
 }
 
-static int readUpgradeAvailable(char *value, size_t valueSize,
-                                char *errorBuf, size_t errorBufSize)
+static int readOtaPending(char *value, size_t valueSize,
+                          char *errorBuf, size_t errorBufSize)
 {
-    return readEnvironmentValue("upgrade_available", value, valueSize,
+    return readEnvironmentValue("ota_pending", value, valueSize,
                                 errorBuf, errorBufSize);
 }
 
@@ -136,21 +136,21 @@ int otaCheckUpgradeAllowed(char *errorBuf, size_t errorBufSize)
     char value[16];
     size_t length;
 
-    if (readUpgradeAvailable(value, sizeof(value),
-                             errorBuf, errorBufSize) != 0) {
-        return -1;
+    /* 未设置 ota_pending 视为 0（允许升级） */
+    if (readOtaPending(value, sizeof(value), errorBuf, errorBufSize) != 0) {
+        return 0;
     }
     length = strcspn(value, "\r\n");
     value[length] = '\0';
     if (strcmp(value, "1") == 0) {
         setError(errorBuf, errorBufSize,
-                 "upgrade_available=1，上次升级尚未提交，拒绝再次升级");
+                 "ota_pending=1，上次升级尚未提交，拒绝再次升级");
         errno = EBUSY;
         return -1;
     }
-    if (strcmp(value, "0") != 0) {
+    if (strcmp(value, "0") != 0 && value[0] != '\0') {
         setError(errorBuf, errorBufSize,
-                 "upgrade_available 值无效: %s", value);
+                 "ota_pending 值无效: %s", value);
         errno = EINVAL;
         return -1;
     }

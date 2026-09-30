@@ -1,0 +1,91 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          board-boot-confirm
+# Required-Start:    $local_fs
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:
+# Short-Description: 确认启动成功（清 bootcount）并启动看门狗喂狗
+### END INIT INFO
+
+set -eu
+
+DEFAULTS_FILE="${BOARD_BOOT_CONFIRM_DEFAULTS:-/etc/default/board-boot-confirm}"
+PIDFILE="/run/board-watchdog-feed.pid"
+FEEDER="/usr/sbin/board-watchdog-feed"
+
+loadDefaults() {
+	if [ -f "${DEFAULTS_FILE}" ]; then
+		# shellcheck disable=SC1090
+		. "${DEFAULTS_FILE}"
+	fi
+	BOARD_WATCHDOG_ENABLE="${BOARD_WATCHDOG_ENABLE:-1}"
+}
+
+logMsg() {
+	logger -t board-boot-confirm "$1" 2>/dev/null || true
+	printf '%s\n' "$1"
+}
+
+# 清 bootcount，并保持 upgrade_available=1 以便下次 U-Boot 继续计数
+confirmBoot() {
+	fw_setenv bootcount 0
+	fw_setenv upgrade_available 1
+	logMsg "已确认启动：bootcount=0 upgrade_available=1"
+}
+
+startWatchdog() {
+	if [ "${BOARD_WATCHDOG_ENABLE}" != "1" ]; then
+		logMsg "看门狗已关闭，跳过"
+		return 0
+	fi
+	if [ ! -x "${FEEDER}" ]; then
+		logMsg "缺少 ${FEEDER}，跳过看门狗"
+		return 0
+	fi
+	if [ ! -e /dev/watchdog ] && [ ! -e /dev/watchdog0 ]; then
+		logMsg "无 /dev/watchdog，跳过看门狗"
+		return 0
+	fi
+	if [ -f "${PIDFILE}" ]; then
+		oldPid="$(cat "${PIDFILE}" 2>/dev/null || true)"
+		if [ -n "${oldPid}" ] && kill -0 "${oldPid}" 2>/dev/null; then
+			logMsg "看门狗喂狗已在运行 pid=${oldPid}"
+			return 0
+		fi
+	fi
+	"${FEEDER}" &
+	echo $! >"${PIDFILE}"
+	logMsg "已启动看门狗喂狗 pid=$(cat "${PIDFILE}")"
+}
+
+stopWatchdog() {
+	if [ -f "${PIDFILE}" ]; then
+		oldPid="$(cat "${PIDFILE}" 2>/dev/null || true)"
+		if [ -n "${oldPid}" ]; then
+			kill "${oldPid}" 2>/dev/null || true
+		fi
+		rm -f "${PIDFILE}"
+	fi
+}
+
+case "${1:-}" in
+	start)
+		loadDefaults
+		confirmBoot
+		startWatchdog
+		;;
+	stop)
+		stopWatchdog
+		;;
+	restart|reload)
+		stopWatchdog
+		loadDefaults
+		confirmBoot
+		startWatchdog
+		;;
+	*)
+		printf '用法: %s {start|stop|restart|reload}\n' "$0" >&2
+		exit 1
+		;;
+esac

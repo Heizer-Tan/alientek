@@ -28,7 +28,7 @@ setenv refresh_partuuids 'mmc dev ${mmcdev}; if test -z "${rootfs_a_partuuid}"; 
 setenv select_slot 'if test -z "${active_slot}"; then setenv active_slot A; fi; if test "${active_slot}" = "B"; then setenv rootpart 3; setenv rootslot rootfsB; else setenv rootpart 2; setenv rootslot rootfsA; setenv active_slot A; fi'
 setenv resolve_rootdev 'run refresh_partuuids; if test "${active_slot}" = "B"; then setenv rootuuid ${rootfs_b_partuuid}; else setenv rootuuid ${rootfs_a_partuuid}; fi; if test -n "${rootuuid}"; then setenv rootdev PARTUUID=${rootuuid}; else setenv rootdev /dev/mmcblk${mmcdev}p${rootpart}; fi'
 setenv mmcargs 'run select_slot; run resolve_rootdev; setenv bootargs console=${console} root=${rootdev} rootwait rw'
-setenv rollback_slot 'if test "${active_slot}" = "B"; then setenv active_slot A; else setenv active_slot B; fi; setenv upgrade_available 0; setenv bootcount 0; saveenv'
+setenv rollback_slot 'if test "${failover_done}" = "1"; then setenv bootcount 0; setenv upgrade_available 1; saveenv; else if test "${active_slot}" = "B"; then setenv active_slot A; else setenv active_slot B; fi; setenv failover_done 1; setenv ota_pending 0; setenv upgrade_available 1; setenv bootcount 0; saveenv; fi'
 setenv mmcboot 'echo Booting from MMC slot ${active_slot}...; run mmcargs; fatload mmc ${mmcdev}:${mmcpart} ${loadaddr} zImage; fatload mmc ${mmcdev}:${mmcpart} ${fdt_addr_r} ${fdtfile}; bootz ${loadaddr} - ${fdt_addr_r}'
 
 # Manual NFS helper (run netboot). Menu path uses boot_nfs which is saveenv-safe.

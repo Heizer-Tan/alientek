@@ -1,0 +1,4 @@
+# board-boot-confirm / 看门狗
+# BOARD_WATCHDOG_ENABLE=1
+# BOARD_WATCHDOG_DEV=/dev/watchdog
+# BOARD_WATCHDOG_INTERVAL=10

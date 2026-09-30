@@ -45,7 +45,9 @@ bool readOtaStatus(OtaStatus *out)
 		return false;
 	*out = OtaStatus{};
 	out->activeSlot = fwPrintenv("active_slot");
-	out->upgradeAvailable = fwPrintenv("upgrade_available");
+	out->upgradeAvailable = fwPrintenv("ota_pending");
+	if (out->upgradeAvailable.isEmpty())
+		out->upgradeAvailable = fwPrintenv("upgrade_available");
 	out->cmdlineRootHint = cmdlineRootHint();
 	out->ok = !out->activeSlot.isEmpty() || !out->upgradeAvailable.isEmpty() ||
 		  !out->cmdlineRootHint.isEmpty();

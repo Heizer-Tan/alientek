@@ -1,11 +1,11 @@
 #!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          board-upgrade-commit
-# Required-Start:    $local_fs $network
+# Required-Start:    $local_fs $network board-boot-confirm
 # Required-Stop:
 # Default-Start:     2 3 4 5
 # Default-Stop:
-# Short-Description: 首启成功后提交升级槽位（含可选健康检查）
+# Short-Description: OTA 首启成功后提交升级槽位（含可选健康检查）
 ### END INIT INFO
 
 set -eu
@@ -46,8 +46,10 @@ rollbackFailedSlot() {
         fi
     fi
     fw_setenv active_slot "${lastGood}"
-    fw_setenv upgrade_available 0
+    fw_setenv ota_pending 0
+    fw_setenv upgrade_available 1
     fw_setenv bootcount 0
+    fw_setenv failover_done 1
     fw_setenv ota_phase failed
     fw_setenv ota_result error
     fw_setenv ota_detail "健康检查失败，已回滚到 ${lastGood}"
@@ -84,10 +86,10 @@ runHealthCheck() {
 commitSlot() {
     loadDefaults
     activeSlot="$(readEnvOrDefault active_slot A)"
-    upgradeAvailable="$(readEnvOrDefault upgrade_available 0)"
+    otaPending="$(readEnvOrDefault ota_pending 0)"
 
-    if [ "${upgradeAvailable}" != "1" ]; then
-        logMsg "当前无需提交槽位，active_slot=${activeSlot}"
+    if [ "${otaPending}" != "1" ]; then
+        logMsg "当前无需提交槽位，active_slot=${activeSlot} ota_pending=${otaPending}"
         return 0
     fi
 
@@ -96,18 +98,20 @@ commitSlot() {
             rollbackFailedSlot
             return 1
         fi
-        logMsg "健康检查失败且未启用回滚，保留 upgrade_available=1"
+        logMsg "健康检查失败且未启用回滚，保留 ota_pending=1"
         return 1
     fi
 
     fw_setenv bootcount 0
-    fw_setenv upgrade_available 0
+    fw_setenv ota_pending 0
+    fw_setenv upgrade_available 1
+    fw_setenv failover_done 0
     fw_setenv last_good_slot "${activeSlot}"
     fw_setenv ota_target_slot "${activeSlot}"
     fw_setenv ota_phase committed
     fw_setenv ota_result success
     fw_setenv ota_detail "升级已提交"
-    logMsg "已提交槽位 ${activeSlot}"
+    logMsg "已提交槽位 ${activeSlot}（ota_pending=0 failover_done=0）"
 }
 
 case "${1:-}" in

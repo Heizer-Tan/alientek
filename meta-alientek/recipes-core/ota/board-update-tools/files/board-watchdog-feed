@@ -1,0 +1,28 @@
+#!/bin/sh
+# 打开 /dev/watchdog 并周期喂狗；进程退出且未 magic close 时将触发复位
+set -eu
+
+DEFAULTS_FILE="${BOARD_BOOT_CONFIRM_DEFAULTS:-/etc/default/board-boot-confirm}"
+if [ -f "${DEFAULTS_FILE}" ]; then
+	# shellcheck disable=SC1090
+	. "${DEFAULTS_FILE}"
+fi
+
+WDT_DEV="${BOARD_WATCHDOG_DEV:-/dev/watchdog}"
+INTERVAL="${BOARD_WATCHDOG_INTERVAL:-10}"
+
+if [ ! -e "${WDT_DEV}" ] && [ -e /dev/watchdog0 ]; then
+	WDT_DEV="/dev/watchdog0"
+fi
+if [ ! -e "${WDT_DEV}" ]; then
+	printf 'board-watchdog-feed: 无设备 %s\n' "${WDT_DEV}" >&2
+	exit 1
+fi
+
+# 保持打开：关闭可能导致立即复位（视驱动 magic close 而定）
+exec 3>"${WDT_DEV}"
+while true; do
+	# 任意写入即喂狗
+	printf '\0' >&3 || exit 1
+	sleep "${INTERVAL}"
+done

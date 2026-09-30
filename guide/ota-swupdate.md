@@ -1,50 +1,70 @@
-# 单一升级包（SWUpdate + A/B）
+# 升级方案（SWUpdate + A/B + 稳态 Failover）
 
-当前量产升级链路采用：
+量产路径：**单一 `.swu` 写入非活动 rootfs 槽 → 试跑 → 提交**；启动失败 / 看门狗超时可自动切槽一次。整卡布局与分区表变更需烧 `.wic`，不能只靠 OTA。
 
-- 一个共享 `boot` FAT 分区，保存 `zImage`、`imx6ull-alientek-alpha.dtb`、`boot.scr`
-- 两个 ext4 根文件系统槽位：`rootfsA`、`rootfsB`
-- U-Boot 环境变量 `active_slot`、`upgrade_available`、`bootcount`
-- Linux 用户态通过 `swupdate` 写入「非活动槽位」，首启成功后由 `board-upgrade-commit` 提交新槽
+相关：启动链 [boot-chain.md](./boot-chain.md)、烧卡 [flash-tf.md](./flash-tf.md)、MQTT [mqtt-ota.md](./mqtt-ota.md)。稳态设计笔记见仓库内 `docs/superpowers/specs/2026-10-01-steady-ab-failover-design.md`。
 
-默认分区布局见 `meta-alientek/wic/imx6ull-alientek-ab.wks.in`：
+---
 
-- `u-boot`：原始写入 TF 卡前部
-- `boot`：FAT，共享启动文件
-- `rootfsA` / `rootfsB`：当前槽位或候选槽位
-- `data`（`LABEL=data` → `/data`）：持久区；**不在 `.swu` 内**，A/B OTA 不覆盖。镜像初值约 64MiB，首启 `board-data-grow` 可扩到盘尾
+## 1. 磁盘布局与谁被升级
 
-LED DTB 切换脚本：`/data/bin/switch-led-dtb`（或 `/usr/sbin/switch-led-dtb`）。
+布局定义：`meta-alientek/wic/imx6ull-alientek-ab.wks.in`。
 
-## 构建 `.swu`
+```
+[raw u-boot] | boot(FAT) | rootfsA | rootfsB | data(ext4 → /data)
+```
+
+| 区域 | OTA `.swu` | 整卡 `.wic` | 说明 |
+|------|------------|-------------|------|
+| u-boot raw | 一般不改 | 覆盖 | U-Boot 环境在 MMC env |
+| `boot` | 视 sw-description；当前以 rootfs 为主 | 覆盖 | 共享 `zImage`、DTB、`boot.scr` |
+| rootfsA / rootfsB | **只写非活动槽** | 两槽都写 | A/B 根文件系统 |
+| `data` | **不写** | 覆盖 | 持久区；初值约 64MiB，首启 `board-data-grow` 可扩到盘尾 |
+
+根槽由 U-Boot `active_slot` 决定：优先 `rootfs_a_partuuid` / `rootfs_b_partuuid`，否则 `/dev/mmcblk0p2`（A）/ `p3`（B）。
+
+`data` 上有 LED DTB 切换脚本：`/data/bin/switch-led-dtb`（封装 `/usr/sbin/switch-led-dtb`），见 [board-apps.md](./board-apps.md)。
+
+---
+
+## 2. OTA 与整卡重烧怎么选
+
+| 场景 | 用什么 |
+|------|--------|
+| 只更新 rootfs（应用/配置） | `.swu` / 下述任一入口 |
+| 新分区、改 wks、U-Boot failover、默认策略等 | **整卡 `.wic`**（bmaptool / Rufus DD） |
+| 只切 LED 用 DTB（chardev ↔ gpio-leds） | `switch-led-dtb` + 重启（不换 rootfs） |
+
+---
+
+## 3. 升级入口（殊途同归）
+
+最终都落到 **`board-apply-update <xxx.swu>`** → `swupdate` 写非活动槽 → 改环境变量 → 自动重启。
+
+### 构建 `.swu`
 
 ```bash
 ./scripts/build.sh alientek-image-update
 ```
 
-生成物位于 `build/tmp/deploy/images/imx6ull-alientek-alpha/`，包含：
+产物在 `build/tmp/deploy/images/imx6ull-alientek-alpha/`：
 
 - `alientek-image-update-imx6ull-alientek-alpha.swu`
-- `alientek-image-base-imx6ull-alientek-alpha.rootfs.ext4.gz`
-- `u-boot.imx`、`zImage`、`imx6ull-alientek-alpha.dtb`、`boot.scr`
+- `alientek-image-base-*.rootfs.ext4.gz`、`u-boot.imx`、`zImage`、DTB、`boot.scr`
 
-## 板端执行升级
-
-将 `.swu` 拷到板子后执行：
+### 命令行
 
 ```bash
 board-apply-update /tmp/alientek-image-update-imx6ull-alientek-alpha.swu
 ```
 
-`board-apply-update` 会读取当前 `active_slot`，自动选择 `stable,slotA` 或 `stable,slotB`，始终写入非活动 rootfs 槽；成功后自动重启以切槽。
+按当前 `active_slot` 选 `stable,slotA` 或 `stable,slotB`，始终写**非活动**槽。
 
-## 板端 Web 升级
+### Web
 
-浏览器打开 `http://<板子IP>:8080/`，在「固件升级」区选择 `.swu` 后上传。服务端调用 `board-apply-update` 自动选非活动槽并切环境，成功后自动重启。无口令，仅建议在实验室可信局域网使用。
+浏览器打开 `http://<板子IP>:8080/`，「固件升级」上传 `.swu`。服务端调用 `board-apply-update`。无口令，仅建议实验室可信局域网。
 
-## Qt 拉取最新（HTTP 目录）
-
-dashboard OTA 页「拉取最新并升级」会调用：
+### Qt dashboard 拉取最新
 
 ```bash
 ota-agent --pull-latest
@@ -52,33 +72,87 @@ ota-agent --pull-latest
 ota-agent --pull-latest http://192.168.5.13:8000
 ```
 
-默认目录来自 `/etc/default/ota-agent` 的 `OTA_FIRMWARE_BASE`（默认 `http://192.168.5.13:8000`）。  
-板端抓取目录 HTML，在 `alientek-image-update*.swu` 中：
+默认目录：`/etc/default/ota-agent` 的 `OTA_FIRMWARE_BASE`（默认 `http://192.168.5.13:8000`）。抓取目录 HTML，在 `alientek-image-update*.swu` 中：
 
-1. **优先**带时间戳的真实包：`…rootfs-YYYYMMDDHHMMSS.swu`（取最大时间戳）
-2. 若没有，再回退到无时间戳名 `…rootfs.swu`（Yocto 指向最新构建的软链）
+1. **优先**带时间戳包：`…rootfs-YYYYMMDDHHMMSS.swu`（取最大时间戳）
+2. 否则回退无时间戳名 `…rootfs.swu`（Yocto 最新软链）
 
-实验室场景不校验远端 sha256；下载后直接 `board-apply-update` 并重启。  
-`ota-agent` 向 stdout 输出 `OTA_PROGRESS <0-100> <stage>`，dashboard 进度条据此更新（解析目录 → 下载 10%–90% → 刷写 → 完成）。  
-仅解析选包可设：`OTA_PULL_DRY_RUN=1 ota-agent --pull-latest`（只打印选中 URL）。
+实验室不校验远端 sha256；下载后直接 `board-apply-update`。stdout 有 `OTA_PROGRESS <0-100> <stage>` 供 dashboard 进度条。仅解析选包：`OTA_PULL_DRY_RUN=1 ota-agent --pull-latest`。
 
-## 首启确认与回滚
+### MQTT
 
-- 升级阶段会把 `upgrade_available=1` 并切换 `active_slot`
-- U-Boot 启用 `bootcount` / `bootlimit=3`
-- 若连续启动失败超过限制，`altbootcmd` 会把槽位切回上一个分区
-- 新系统正常启动后，`/etc/init.d/board-upgrade-commit` 会清除 `upgrade_available` 并把 `bootcount` 归零
-- 板端实测步骤见本地 `docs/swu-upgrade-validation.md`（该目录不入库，仅本机设计/验证笔记）
+见 [mqtt-ota.md](./mqtt-ota.md)（同样落到 apply）。
 
-可在板上查看状态：
+---
 
-```bash
-fw_printenv active_slot
-fw_printenv upgrade_available
-fw_printenv bootcount
+## 4. 一次 OTA 的生命周期
+
+```
+当前槽 A 运行（示例）
+    │
+    ▼
+检查：ota_pending≠1，且 cmdline 槽与 active_slot 一致
+    │
+    ▼
+swupdate 写入 B（stable,slotB）
+    │
+    ▼
+fw_setenv: active_slot=B, ota_pending=1,
+           upgrade_available=1, bootcount=0
+    │
+    ▼
+reboot → 从 B 启动（试跑）
+    │
+    ├─ 成功进系统
+    │     board-boot-confirm: bootcount=0, upgrade_available=1, 开看门狗喂狗
+    │     board-upgrade-commit（ota_pending=1）: 健康检查
+    │           ├─ 通过 → ota_pending=0, failover_done=0, last_good_slot=B  【提交】
+    │           └─ 失败 → 切回 A, failover_done=1, 重启                  【用户态回滚】
+    │
+    └─ 起不来 / 看门狗反复复位（bootcount≥3）
+          altbootcmd:
+            failover_done≠1 → 切到另一槽, failover_done=1, ota_pending=0
+            failover_done=1 → 进 bootmenu，不再自动切
 ```
 
-当前板级 `boot.scr` 会按 `active_slot` 选择根分区：优先使用 U-Boot 环境中的 `rootfs_a_partuuid` / `rootfs_b_partuuid`（`part uuid mmc 0:2/3`，需 `CONFIG_CMD_PART`），未缓存时回退 `/dev/mmcblk0p2` 与 `/dev/mmcblk0p3`。
+要点：**新槽先试跑，确认成功才算提交**；失败可回旧槽。`ota_pending=1` 期间拒绝再次升级。
 
-MQTT 远程升级见 [mqtt-ota.md](./mqtt-ota.md)。
-Qt 拉取最新见上文「Qt 拉取最新（HTTP 目录）」。
+---
+
+## 5. 稳态 Failover（启动失败 / 看门狗）
+
+与 OTA 共用 bootcount，**不限于升级窗口**：
+
+1. `upgrade_available=1` 常开 → 每次 U-Boot 启动 `bootcount++`（`BOOTCOUNT_ENV`，`bootlimit=3`）
+2. 正常进系统 → `board-boot-confirm` 清 `bootcount` 并喂狗（`/dev/watchdog`）
+3. 起不来或卡死被 WDT 复位且累计 ≥ 3 → 自动切**一次**槽（`failover_done=1`）
+4. 切过后仍失败 → 进 `bootmenu`，避免 A↔B 死循环
+5. 修好后再允许自动切一次：`fw_setenv failover_done 0`
+
+OTA 成功提交时也会清 `failover_done`，恢复「再坏可再切一次」的资格。
+
+---
+
+## 6. 关键环境变量
+
+| 变量 | 作用 |
+|------|------|
+| `active_slot` | 当前应启动的根槽 A/B |
+| `ota_pending` | `1`=OTA 已写新槽、尚未提交；拒绝再次升级 |
+| `upgrade_available` | **bootcount 使能**（保持 `1`）；不再表示「OTA 未提交」 |
+| `bootcount` / `bootlimit` | 连续未确认启动次数 / 上限（默认 3） |
+| `failover_done` | 已做过一次自动切槽 |
+| `last_good_slot` | 上次提交成功的槽 |
+| `rootfs_a_partuuid` / `rootfs_b_partuuid` | 选根用的 PARTUUID 缓存 |
+
+```bash
+fw_printenv active_slot ota_pending upgrade_available bootcount failover_done
+```
+
+---
+
+## 7. 明确不做的
+
+- 双槽都坏时自动 NFS 救援
+- 业务探针失败也切槽（只覆盖启动失败 + 看门狗）
+- `.swu` 更新 `data` 分区内容
