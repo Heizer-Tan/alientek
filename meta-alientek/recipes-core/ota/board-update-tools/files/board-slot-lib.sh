@@ -1,5 +1,5 @@
 #!/bin/sh
-# 槽位辅助库：供 board-apply-update 等脚本 source
+# 槽位辅助库：供 ota-apply 等脚本 source
 # 识别 root= mmcblk*p{2,3}、PARTLABEL、PARTUUID（含 MBR 形 xxx-02/-03）；挂载源/blkid 兜底
 
 BOARD_CMDLINE_FILE="${BOARD_CMDLINE_FILE:-/proc/cmdline}"

@@ -55,12 +55,12 @@ while [ "$#" -gt 0 ]; do
 done
 cp "${MOCK_PACKAGE}" "${outputPath}"
 EOF
-cat >"${mockBin}/board-apply-update" <<'EOF'
+cat >"${mockBin}/ota-apply" <<'EOF'
 #!/bin/sh
 set -eu
 test -f "${1}"
 EOF
-chmod +x "${mockBin}/curl" "${mockBin}/board-apply-update" \
+chmod +x "${mockBin}/curl" "${mockBin}/ota-apply" \
     "${mockBin}/fw_setenv"
 
 cat >"${tempDir}/test_ota_recovery.c" <<'EOF'

@@ -56,7 +56,7 @@ case "$2" in
 esac
 EOF
 
-cat >"${mockBin}/board-apply-update" <<'EOF'
+cat >"${mockBin}/ota-apply" <<'EOF'
 #!/bin/sh
 set -eu
 printf '%s\n' "$@" >"${MOCK_UPGRADE_LOG}"
@@ -67,7 +67,7 @@ set -eu
 printf '%s=%s\n' "$1" "${2-}" >>"${MOCK_FW_SETENV_LOG}"
 EOF
 chmod +x "${mockBin}/curl" "${mockBin}/fw_printenv" \
-    "${mockBin}/board-apply-update" "${mockBin}/fw_setenv"
+    "${mockBin}/ota-apply" "${mockBin}/fw_setenv"
 
 make -C "${sourceDir}" clean >/dev/null
 make -C "${sourceDir}" \

@@ -20,7 +20,7 @@ typedef struct sqlite3 sqlite3;
 #define WEBSERVER_DEFAULT_INDEX "/usr/share/webserver/index.html"
 #define WEBSERVER_DEFAULT_ICM_DB_PATH "/var/lib/icm20608/icm20608.db"
 #define WEBSERVER_DEFAULT_ICM_INDEX "/usr/share/webserver/icm20608.html"
-#define WEBSERVER_DEFAULT_APPLY "/usr/sbin/board-apply-update"
+#define WEBSERVER_DEFAULT_APPLY "/usr/sbin/ota-apply"
 #define WEBSERVER_DEFAULT_SWU_PATH "/var/tmp/web-upgrade.swu"
 #define WEBSERVER_DEFAULT_MIME_PATH "/var/tmp/web-upgrade.mime"
 #define WEBSERVER_DEFAULT_LOG_PATH "/var/tmp/web-upgrade.log"

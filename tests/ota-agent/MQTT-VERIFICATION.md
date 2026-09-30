@@ -253,7 +253,7 @@ ota-agent --mqtt-command '{"requestId":"x"}' /tmp/x.swu
 
 ### 4.5 真刷写注意
 
-成功路径仍会：下载 → sha256 → `board-apply-update` →（`autoReboot`）重启 → 启动恢复回报 `committed`/`failed`。
+成功路径仍会：下载 → sha256 → `ota-apply` →（`autoReboot`）重启 → 启动恢复回报 `committed`/`failed`。
 
 真刷写前确认：A/B 分区正常、`.swu` 为本板产物、有串口兜底。
 

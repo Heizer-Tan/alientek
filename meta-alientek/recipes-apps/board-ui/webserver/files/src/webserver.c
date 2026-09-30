@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT */
-/* webserver：传感器历史查询 + Web 固件升级（调用 board-apply-update） */
+/* webserver：传感器历史查询 + Web 固件升级（调用 ota-apply） */
 
 #include "webserver.h"
 

@@ -39,7 +39,7 @@
 
 ## 3. 升级入口（殊途同归）
 
-最终都落到 **`board-apply-update <xxx.swu>`** → `swupdate` 写非活动槽 → 改环境变量 → 自动重启。
+最终都落到 **`ota-apply <xxx.swu>`** → `swupdate` 写非活动槽 → 改环境变量 → 自动重启。
 
 ### 构建 `.swu`
 
@@ -55,14 +55,14 @@
 ### 命令行
 
 ```bash
-board-apply-update /tmp/alientek-image-update-imx6ull-alientek-alpha.swu
+ota-apply /tmp/alientek-image-update-imx6ull-alientek-alpha.swu
 ```
 
 按当前 `active_slot` 选 `stable,slotA` 或 `stable,slotB`，始终写**非活动**槽。
 
 ### Web
 
-浏览器打开 `http://<板子IP>:8080/`，「固件升级」上传 `.swu`。服务端调用 `board-apply-update`。无口令，仅建议实验室可信局域网。
+浏览器打开 `http://<板子IP>:8080/`，「固件升级」上传 `.swu`。服务端调用 `ota-apply`。无口令，仅建议实验室可信局域网。
 
 ### Qt dashboard 拉取最新
 
@@ -77,7 +77,7 @@ ota-agent --pull-latest http://192.168.5.13:8000
 1. **优先**带时间戳包：`…rootfs-YYYYMMDDHHMMSS.swu`（取最大时间戳）
 2. 否则回退无时间戳名 `…rootfs.swu`（Yocto 最新软链）
 
-实验室不校验远端 sha256；下载后直接 `board-apply-update`。stdout 有 `OTA_PROGRESS <0-100> <stage>` 供 dashboard 进度条。仅解析选包：`OTA_PULL_DRY_RUN=1 ota-agent --pull-latest`。
+实验室不校验远端 sha256；下载后直接 `ota-apply`。stdout 有 `OTA_PROGRESS <0-100> <stage>` 供 dashboard 进度条。仅解析选包：`OTA_PULL_DRY_RUN=1 ota-agent --pull-latest`。
 
 ### MQTT
 

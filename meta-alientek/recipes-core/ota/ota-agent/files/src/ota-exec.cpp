@@ -160,9 +160,9 @@ int otaCheckUpgradeAllowed(char *errorBuf, size_t errorBufSize)
 int otaRunUpgrade(const char *swuPath, int autoReboot,
                   char *errorBuf, size_t errorBufSize)
 {
-    char *args[] = {(char *)"board-apply-update", (char *)swuPath, NULL};
+    char *args[] = {(char *)"ota-apply", (char *)swuPath, NULL};
 
-    (void)autoReboot; /* board-apply-update 成功后固定自动重启 */
+    (void)autoReboot; /* ota-apply 成功后固定自动重启 */
     if (swuPath == NULL || swuPath[0] == '\0') {
         setError(errorBuf, errorBufSize, "升级包路径不能为空");
         errno = EINVAL;
@@ -171,7 +171,7 @@ int otaRunUpgrade(const char *swuPath, int autoReboot,
     if (otaCheckUpgradeAllowed(errorBuf, errorBufSize) != 0) {
         return -1;
     }
-    return runCommand(args, "board-apply-update", errorBuf, errorBufSize);
+    return runCommand(args, "ota-apply", errorBuf, errorBufSize);
 }
 
 static int copyVersionValue(const char *line, char *versionBuf,

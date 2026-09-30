@@ -5,7 +5,7 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 RDEPENDS:${PN} = "swupdate libubootenv-bin"
 
 SRC_URI = " \
-    file://board-apply-update \
+    file://ota-apply \
     file://board-slot-lib.sh \
     file://board-upgrade-commit.init \
     file://board-upgrade-commit.default \
@@ -36,7 +36,9 @@ RDEPENDS:${PN} += "${PN}-boot-confirm"
 
 do_install() {
     install -d "${D}${sbindir}"
-    install -m 0755 "${WORKDIR}/board-apply-update" "${D}${sbindir}/board-apply-update"
+    install -m 0755 "${WORKDIR}/ota-apply" "${D}${sbindir}/ota-apply"
+    # 兼容旧命令名
+    ln -sf ota-apply "${D}${sbindir}/board-apply-update"
     install -m 0755 "${WORKDIR}/board-upgrade-healthcheck" \
         "${D}${sbindir}/board-upgrade-healthcheck"
     install -m 0755 "${WORKDIR}/board-watchdog-feed" \

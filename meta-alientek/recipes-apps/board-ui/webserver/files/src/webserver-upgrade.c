@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT */
-/* Web 固件升级：multipart 接收 + board-apply-update + token 鉴权 */
+/* Web 固件升级：multipart 接收 + ota-apply + token 鉴权 */
 
 #include "webserver.h"
 
@@ -186,7 +186,7 @@ static void loadLogTail(const char *path, char *errOut, size_t errSize)
 	errOut[n] = '\0';
 }
 
-/* 执行 board-apply-update；成功 0，失败把日志尾部写入 errOut */
+/* 执行 ota-apply；成功 0，失败把日志尾部写入 errOut */
 static int runBoardApplyUpdate(const char *swuPath, char *errOut, size_t errSize)
 {
 	pid_t pid;
@@ -217,7 +217,7 @@ static int runBoardApplyUpdate(const char *swuPath, char *errOut, size_t errSize
 		if (chdir("/tmp") != 0)
 			dprintf(STDERR_FILENO, "chdir /tmp 失败: %s\n",
 				strerror(errno));
-		execl(cfg->applyPath, "board-apply-update", swuPath, (char *)NULL);
+		execl(cfg->applyPath, "ota-apply", swuPath, (char *)NULL);
 		dprintf(STDERR_FILENO, "无法执行 %s: %s\n", cfg->applyPath,
 			strerror(errno));
 		_exit(127);
@@ -232,14 +232,14 @@ static int runBoardApplyUpdate(const char *swuPath, char *errOut, size_t errSize
 		return 0;
 	if (errOut[0] == '\0') {
 		if (WIFEXITED(status))
-			snprintf(errOut, errSize, "board-apply-update 退出码 %d",
+			snprintf(errOut, errSize, "ota-apply 退出码 %d",
 				 WEXITSTATUS(status));
 		else if (WIFSIGNALED(status))
 			snprintf(errOut, errSize,
-				 "board-apply-update 被信号 %d 终止",
+				 "ota-apply 被信号 %d 终止",
 				 WTERMSIG(status));
 		else
-			snprintf(errOut, errSize, "board-apply-update 失败");
+			snprintf(errOut, errSize, "ota-apply 失败");
 	}
 	return -1;
 }
@@ -402,7 +402,7 @@ void handleUpgrade(int clientFd, const char *headers, const char *pref,
 	if (runBoardApplyUpdate(cfg->swuPath, errBuf, sizeof(errBuf)) != 0) {
 		syslog(LOG_ERR, "web upgrade apply failed: %s",
 		       errBuf[0] ? errBuf : "(no detail)");
-		if (jsonEscape(errBuf[0] ? errBuf : "board-apply-update 失败",
+		if (jsonEscape(errBuf[0] ? errBuf : "ota-apply 失败",
 			       msgEsc, sizeof(msgEsc)) != 0)
 			snprintf(msgEsc, sizeof(msgEsc), "\"升级失败\"");
 		snprintf(json, sizeof(json), "{\"ok\":false,\"message\":%s}",
