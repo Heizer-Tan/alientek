@@ -48,6 +48,7 @@
 | [guide/u-boot-recipe.md](guide/u-boot-recipe.md) | U-Boot 配方分层与升版 |
 | [guide/flash-tf.md](guide/flash-tf.md) | 烧写 TF 卡 / mmcboot |
 | [guide/ota-swupdate.md](guide/ota-swupdate.md) | SWUpdate A/B、Web 升级、回滚 |
+| [guide/ota-failover-test.md](guide/ota-failover-test.md) | 稳态 A/B failover 实验室测试 |
 | [guide/mqtt-ota.md](guide/mqtt-ota.md) | MQTT OTA 双进程与配置 |
 | [guide/board-apps.md](guide/board-apps.md) | 按键/触摸/光感/六轴/dashboard/Web |
 | [guide/network-ntp.md](guide/network-ntp.md) | NTP 与板载静态网络 |

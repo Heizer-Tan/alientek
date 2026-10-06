@@ -131,6 +131,8 @@ reboot → 从 B 启动（试跑）
 
 OTA 成功提交时也会清 `failover_done`，恢复「再坏可再切一次」的资格。
 
+实验室验证步骤、原理（为何不能只删 init、bootcount 阈值等）见 **[ota-failover-test.md](./ota-failover-test.md)**。
+
 ---
 
 ## 6. 关键环境变量

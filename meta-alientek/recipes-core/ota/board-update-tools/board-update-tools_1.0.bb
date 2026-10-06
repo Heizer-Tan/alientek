@@ -6,6 +6,7 @@ RDEPENDS:${PN} = "swupdate libubootenv-bin"
 
 SRC_URI = " \
     file://ota-apply \
+    file://ota-failover-test \
     file://board-slot-lib.sh \
     file://board-upgrade-commit.init \
     file://board-upgrade-commit.default \
@@ -39,6 +40,8 @@ do_install() {
     install -m 0755 "${WORKDIR}/ota-apply" "${D}${sbindir}/ota-apply"
     # 兼容旧命令名
     ln -sf ota-apply "${D}${sbindir}/board-apply-update"
+    install -m 0755 "${WORKDIR}/ota-failover-test" \
+        "${D}${sbindir}/ota-failover-test"
     install -m 0755 "${WORKDIR}/board-upgrade-healthcheck" \
         "${D}${sbindir}/board-upgrade-healthcheck"
     install -m 0755 "${WORKDIR}/board-watchdog-feed" \

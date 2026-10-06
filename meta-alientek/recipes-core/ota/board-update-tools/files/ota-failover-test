@@ -1,0 +1,306 @@
+#!/bin/sh
+# 稳态 A/B failover 实验室测试：把当前槽弄挂，验证 bootcount≥3 后切到另一槽。
+#
+# 原理：
+#   U-Boot：upgrade_available=1 时每次进 U-Boot 都 bootcount++
+#   bootcount > bootlimit(3) 且 failover_done≠1 → altbootcmd 切槽
+#   注意：看门狗由 board-boot-confirm 在正常 init 之后才打开。
+#   因此「删掉 init」不会复位：内核会退到 /bin/sh 应急壳，计数停在 1。
+#   break 改为：备份 init，再写一个只执行 reboot -f 的桩，让每次启动立刻硬复位。
+#
+# 用法见 usage()。危险子命令必须加 --yes。
+
+set -eu
+
+LIB="${BOARD_SLOT_LIB:-/usr/share/board-update-tools/board-slot-lib.sh}"
+INIT_PATH="/sbin/init"
+INIT_BAK="/sbin/init.bak"
+CONFIRM_INIT="/etc/init.d/board-boot-confirm"
+MMC_A="/dev/mmcblk0p2"
+MMC_B="/dev/mmcblk0p3"
+
+needYes=0
+doReboot=0
+
+die() {
+	printf '错误: %s\n' "$1" >&2
+	exit 1
+}
+
+usage() {
+	cat >&2 <<'EOF'
+用法: ota-failover-test <命令> [--yes] [--reboot]
+
+命令:
+  status      打印 cmdline、槽位、U-Boot 计数（只读）
+  arm         清 failover_done、bootcount，打开 upgrade_available（准备测试）
+  break       备份 /sbin/init，换成立刻 reboot -f 的桩（需 --yes）
+  restore     在对槽挂载点上恢复 init.bak（切过去之后修坏槽）
+  restore-here  在当前根上恢复 init.bak（若还没重启、想反悔）
+  soft        停掉并去掉启动确认执行位（不破坏 init，只测计数切槽）
+  soft-undo   恢复 board-boot-confirm 可执行
+
+选项:
+  --yes       确认执行破坏性操作（break / restore / soft）
+  --reboot    操作成功后立刻 reboot（break / arm / soft）
+
+示例（当前 A，对槽 B 必须能启动）:
+  ota-failover-test status
+  ota-failover-test arm --yes
+  ota-failover-test break --yes --reboot
+  # 串口等 FAILSAFE: switched to B（bootcount>3，约 4 次硬复位）
+  ota-failover-test restore --yes
+  ota-failover-test arm --yes     # 若还要再测，清 failover_done
+EOF
+	exit 1
+}
+
+loadSlotLib() {
+	if [ ! -f "${LIB}" ]; then
+		die "找不到槽位库 ${LIB}"
+	fi
+	# shellcheck disable=SC1090
+	. "${LIB}"
+}
+
+printEnv() {
+	name="$1"
+	val="$(fw_printenv -n "${name}" 2>/dev/null || true)"
+	printf '  %-22s %s\n' "${name}" "${val:-<空>}"
+}
+
+cmdStatus() {
+	loadSlotLib
+	printf 'cmdline: %s\n' "$(tr -d '\n' </proc/cmdline 2>/dev/null || true)"
+	printf '检测槽位: %s\n' "$(board_read_current_slot)"
+	printf 'U-Boot:\n'
+	printEnv active_slot
+	printEnv failover_done
+	printEnv bootcount
+	printEnv upgrade_available
+	printEnv ota_pending
+	printEnv last_good_slot
+	if [ -e "${INIT_BAK}" ]; then
+		printf '当前根: %s 存在（本槽已被 break）\n' "${INIT_BAK}"
+	fi
+	if [ -x "${CONFIRM_INIT}" ]; then
+		printf 'board-boot-confirm: 可执行\n'
+	else
+		printf 'board-boot-confirm: 不可执行或缺失（soft 测试中？）\n'
+	fi
+}
+
+# 切槽资格必须打开，否则 altbootcmd 会进 bootmenu 而不切槽
+cmdArm() {
+	[ "${needYes}" = "1" ] || die "arm 会改 U-Boot 环境，请加 --yes"
+	if ! command -v fw_setenv >/dev/null 2>&1; then
+		die "没有 fw_setenv"
+	fi
+	fw_setenv failover_done 0 || die "写 failover_done 失败"
+	fw_setenv upgrade_available 1 || die "写 upgrade_available 失败"
+	fw_setenv bootcount 0 || die "写 bootcount 失败"
+	printf '已准备: failover_done=0 bootcount=0 upgrade_available=1\n'
+	maybeReboot
+}
+
+otherSlot() {
+	cur="$1"
+	case "${cur}" in
+	A) printf '%s\n' "B" ;;
+	B) printf '%s\n' "A" ;;
+	*) die "当前槽位无法识别: ${cur}" ;;
+	esac
+}
+
+slotDev() {
+	case "$1" in
+	A) printf '%s\n' "${MMC_A}" ;;
+	B) printf '%s\n' "${MMC_B}" ;;
+	*) die "未知槽位 $1" ;;
+	esac
+}
+
+# 桩：内核把此文件当 init 执行；reboot -f 不经过 SysV
+installRebootStub() {
+	if ! command -v reboot >/dev/null 2>&1; then
+		die "没有 reboot 命令，无法安装复位桩"
+	fi
+	rebootBin="$(command -v reboot)"
+	{
+		printf '%s\n' "#!/bin/sh"
+		printf '%s\n' "# ota-failover-test stub: hard reset for bootcount"
+		printf 'exec %s -f\n' "${rebootBin}"
+	} >"${INIT_PATH}" || die "写入 init 桩失败"
+	chmod 0755 "${INIT_PATH}" || die "chmod init 桩失败"
+}
+
+isFailoverStub() {
+	path="$1"
+	if [ ! -f "${path}" ]; then
+		return 1
+	fi
+	grep -q 'ota-failover-test stub' "${path}" 2>/dev/null
+}
+
+cmdBreak() {
+	[ "${needYes}" = "1" ] || die "break 会让当前槽循环硬复位，请加 --yes"
+	loadSlotLib
+	cur="$(board_read_current_slot)"
+	case "${cur}" in
+	A|B) ;;
+	*) die "无法识别当前槽，拒绝破坏 init。先看: ota-failover-test status" ;;
+	esac
+	if [ ! -x "${INIT_PATH}" ]; then
+		die "${INIT_PATH} 不可执行，停止以免两槽都坏"
+	fi
+	if isFailoverStub "${INIT_PATH}"; then
+		die "已经是复位桩，不要重复 break"
+	fi
+	if [ -e "${INIT_BAK}" ]; then
+		die "${INIT_BAK} 已存在，不要重复 break"
+	fi
+	oth="$(otherSlot "${cur}")"
+	printf '将破坏当前槽 %s 的 init；对槽 %s 必须能启动。\n' "${cur}" "${oth}"
+	mv "${INIT_PATH}" "${INIT_BAK}" || die "改名 init 失败"
+	installRebootStub
+	sync
+	printf '已备份 init → %s，并安装 reboot -f 桩\n' "${INIT_BAK}"
+	printf '之后每次启动会立刻复位；bootcount>3 时串口应出现 FAILSAFE: switched to %s\n' "${oth}"
+	maybeReboot
+}
+
+# 在指定块设备上恢复 init（挂载 → 改回 → 卸载）
+restoreOnDev() {
+	dev="$1"
+	mnt="$(mktemp -d /tmp/failover-restore.XXXXXX)" || die "无法创建挂载点"
+	if ! mount "${dev}" "${mnt}"; then
+		rmdir "${mnt}"
+		die "挂载 ${dev} 失败"
+	fi
+	if [ ! -e "${mnt}${INIT_BAK}" ]; then
+		umount "${mnt}" || true
+		rmdir "${mnt}"
+		die "${dev} 上没有 ${INIT_BAK}（该槽可能没被 break）"
+	fi
+	if [ -e "${mnt}${INIT_PATH}" ]; then
+		if ! isFailoverStub "${mnt}${INIT_PATH}"; then
+			umount "${mnt}" || true
+			rmdir "${mnt}"
+			die "${dev} 上 ${INIT_PATH} 仍在且不是测试桩，拒绝覆盖"
+		fi
+		rm -f "${mnt}${INIT_PATH}"
+	fi
+	mv "${mnt}${INIT_BAK}" "${mnt}${INIT_PATH}" || {
+		umount "${mnt}" || true
+		rmdir "${mnt}"
+		die "恢复 init 失败"
+	}
+	sync
+	umount "${mnt}" || die "卸载 ${dev} 失败"
+	rmdir "${mnt}"
+	printf '已在 %s 恢复 %s\n' "${dev}" "${INIT_PATH}"
+}
+
+cmdRestoreHere() {
+	[ "${needYes}" = "1" ] || die "restore-here 请加 --yes"
+	if [ ! -e "${INIT_BAK}" ]; then
+		die "当前根没有 ${INIT_BAK}"
+	fi
+	if [ -e "${INIT_PATH}" ]; then
+		if ! isFailoverStub "${INIT_PATH}"; then
+			die "${INIT_PATH} 已存在且不是测试桩，拒绝覆盖"
+		fi
+		rm -f "${INIT_PATH}"
+	fi
+	mv "${INIT_BAK}" "${INIT_PATH}" || die "恢复失败"
+	sync
+	printf '当前根已恢复 %s\n' "${INIT_PATH}"
+}
+
+cmdRestore() {
+	[ "${needYes}" = "1" ] || die "restore 请加 --yes"
+	loadSlotLib
+	cur="$(board_read_current_slot)"
+	# 已切到对槽：修「另一边」；若仍在本槽则修本地
+	if [ -e "${INIT_BAK}" ]; then
+		cmdRestoreHere
+		return 0
+	fi
+	oth="$(otherSlot "${cur}")"
+	dev="$(slotDev "${oth}")"
+	if [ ! -b "${dev}" ]; then
+		die "找不到 ${dev}"
+	fi
+	printf '当前槽 %s，尝试修复对槽 %s（%s）\n' "${cur}" "${oth}" "${dev}"
+	restoreOnDev "${dev}"
+}
+
+cmdSoft() {
+	[ "${needYes}" = "1" ] || die "soft 会关掉启动确认，请加 --yes"
+	if [ ! -f "${CONFIRM_INIT}" ]; then
+		die "没有 ${CONFIRM_INIT}（镜像可能未含 board-boot-confirm）"
+	fi
+	if [ -x "${CONFIRM_INIT}" ]; then
+		"${CONFIRM_INIT}" stop || true
+	fi
+	chmod a-x "${CONFIRM_INIT}" || die "chmod 失败"
+	printf '已禁用 board-boot-confirm。再 reboot 约 3 次应切槽（系统仍能进 Linux）。\n'
+	printf '测完务必: ota-failover-test soft-undo --yes\n'
+	maybeReboot
+}
+
+cmdSoftUndo() {
+	[ "${needYes}" = "1" ] || die "soft-undo 请加 --yes"
+	if [ ! -f "${CONFIRM_INIT}" ]; then
+		die "没有 ${CONFIRM_INIT}"
+	fi
+	chmod a+x "${CONFIRM_INIT}" || die "chmod 失败"
+	"${CONFIRM_INIT}" start || die "启动 board-boot-confirm 失败"
+	printf '已恢复 board-boot-confirm\n'
+}
+
+maybeReboot() {
+	if [ "${doReboot}" != "1" ]; then
+		return 0
+	fi
+	printf '即将 reboot -f（不经过 init）...\n'
+	sync
+	reboot -f
+}
+
+parseOpts() {
+	cmd=""
+	for arg in "$@"; do
+		case "${arg}" in
+		--yes) needYes=1 ;;
+		--reboot) doReboot=1 ;;
+		-h|--help) usage ;;
+		status|arm|break|restore|restore-here|soft|soft-undo)
+			if [ -n "${cmd}" ]; then
+				die "只能指定一个命令"
+			fi
+			cmd="${arg}"
+			;;
+		*) die "未知参数: ${arg}" ;;
+		esac
+	done
+	if [ -z "${cmd}" ]; then
+		usage
+	fi
+}
+
+main() {
+	parseOpts "$@"
+	case "${cmd}" in
+	status) cmdStatus ;;
+	arm) cmdArm ;;
+	break) cmdBreak ;;
+	restore) cmdRestore ;;
+	restore-here) cmdRestoreHere ;;
+	soft) cmdSoft ;;
+	soft-undo) cmdSoftUndo ;;
+	*) usage ;;
+	esac
+}
+
+main "$@"
