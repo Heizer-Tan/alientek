@@ -16,6 +16,7 @@ enum class PixelGlyph : int {
 	Led,
 	Key,
 	Ota,
+	Failover,
 };
 
 /* 放大绘制的像素图标 */

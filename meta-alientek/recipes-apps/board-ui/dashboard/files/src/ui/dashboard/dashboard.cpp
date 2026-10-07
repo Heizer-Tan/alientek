@@ -9,12 +9,16 @@
 #include "ui/style/pixel_widgets.hpp"
 
 #include <QAbstractButton>
+#include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScroller>
+#include <QScrollerProperties>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QTime>
@@ -38,6 +42,7 @@ constexpr char kCyan[] = "#22D3EE";
 constexpr char kYellow[] = "#FBBF24";
 constexpr char kOrange[] = "#F87171";
 constexpr char kPurple[] = "#C084FC";
+constexpr char kFailoverTone[] = "#38BDF8";
 
 QString terminalFont()
 {
@@ -117,6 +122,23 @@ QPushButton *makeBackBtn(const char *tone)
 	return back;
 }
 
+/* 主页摘要用：单次 fw_printenv，避免每秒跑整段 shell */
+QString fwPrintenvQuick(const char *name)
+{
+	QProcess p;
+	p.setProcessChannelMode(QProcess::MergedChannels);
+	p.start(QStringLiteral("fw_printenv"),
+		{QStringLiteral("-n"), QString::fromLatin1(name)});
+	if (!p.waitForFinished(1500)) {
+		p.kill();
+		p.waitForFinished(200);
+		return QString();
+	}
+	if (p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0)
+		return QString();
+	return QString::fromUtf8(p.readAllStandardOutput()).trimmed();
+}
+
 } // namespace
 
 Dashboard::Dashboard(const QString &apDev, const QString &icmName,
@@ -145,6 +167,7 @@ Dashboard::Dashboard(const QString &apDev, const QString &icmName,
 	stack_->addWidget(buildLedsPage());
 	stack_->addWidget(buildKeysPage());
 	stack_->addWidget(buildOtaPage());
+	stack_->addWidget(buildFailoverPage());
 
 	keys_ = new KeyWatcher(this);
 	connect(keys_, &KeyWatcher::pressedChanged, this, &Dashboard::onKeyPressed);
@@ -152,15 +175,20 @@ Dashboard::Dashboard(const QString &apDev, const QString &icmName,
 		homeKeySummary_->setText(QString::fromUtf8("N/A"));
 
 	homeTimer_ = new QTimer(this);
+	clockTimer_ = new QTimer(this);
 	detailTimer_ = new QTimer(this);
-	homeTimer_->setInterval(homeMs > 0 ? homeMs : 1000);
+	/* 默认 500ms：传感器刷新更快；滑动中会跳过以免掉帧 */
+	homeTimer_->setInterval(homeMs > 0 ? homeMs : 500);
+	clockTimer_->setInterval(200);
 	detailTimer_->setInterval(detailMs > 0 ? detailMs : 500);
 	connect(homeTimer_, &QTimer::timeout, this, &Dashboard::onHomeTick);
+	connect(clockTimer_, &QTimer::timeout, this, &Dashboard::onClockTick);
 	connect(detailTimer_, &QTimer::timeout, this, &Dashboard::onDetailTick);
 	connect(stack_, &QStackedWidget::currentChanged, this,
 		&Dashboard::setPageTimers);
 
 	setPageTimers(PageHome);
+	onClockTick();
 	onHomeTick();
 }
 
@@ -178,6 +206,18 @@ void Dashboard::applyDarkStyle(QWidget *w)
 		"  background-image: radial-gradient(%4 1.5px, transparent 1.5px);"
 		"  background-size: 6px 6px; }"
 		"QPushButton, QPushButton:focus { outline: none; }"
+		"QScrollArea { border: none; background-color: transparent;"
+		"  background-image: none; }"
+		"QScrollBar:vertical {"
+		"  background: %1; width: 10px; margin: 0;"
+		"  border: 2px solid %4;"
+		"}"
+		"QScrollBar::handle:vertical {"
+		"  background: %4; min-height: 24px;"
+		"}"
+		"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
+		"  height: 0;"
+		"}"
 		"QMessageBox { background-color: %1; color: %2; }"
 		"QMessageBox QLabel { color: %2; %3 }"
 		"*:focus { outline: none; }")
@@ -191,7 +231,9 @@ PixelShell *Dashboard::makeHomeCard(PixelGlyph glyph, const QString &title,
 {
 	const QColor tone{QLatin1String(accent)};
 	auto *shell = new PixelShell(tone);
-	shell->setMinimumHeight(88);
+	/* 1024x600：三行约满屏，第四行（Failover）必须下滑才见 */
+	shell->setMinimumHeight(168);
+	shell->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
 	/* 实心 tone 顶栏 + 像素精灵 + 标题 */
 	auto *bar = new QWidget;
@@ -272,10 +314,40 @@ QWidget *Dashboard::buildHomePage()
 	hudShell->body()->addLayout(hudRow);
 	lay->addWidget(hudShell, 0);
 
-	auto *grid = new QGridLayout;
+	/* 卡片区纵向滑动：前 6 卡一屏，Failover 在屏外 */
+	homeScroll_ = new QScrollArea;
+	auto *scroll = homeScroll_;
+	scroll->setWidgetResizable(true);
+	scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+	scroll->setFrameShape(QFrame::NoFrame);
+	scroll->viewport()->setAttribute(Qt::WA_OpaquePaintEvent, true);
+	/* 触摸板：手指滑动翻页（linuxfb + Goodix） */
+	QScroller::grabGesture(scroll->viewport(), QScroller::TouchGesture);
+	QScroller::grabGesture(scroll->viewport(),
+			       QScroller::LeftMouseButtonGesture);
+	if (QScroller *sc = QScroller::scroller(scroll->viewport())) {
+		QScrollerProperties props = sc->scrollerProperties();
+		props.setScrollMetric(QScrollerProperties::FrameRate,
+				      QScrollerProperties::Fps60);
+		props.setScrollMetric(
+			QScrollerProperties::VerticalOvershootPolicy,
+			QScrollerProperties::OvershootAlwaysOff);
+		props.setScrollMetric(
+			QScrollerProperties::HorizontalOvershootPolicy,
+			QScrollerProperties::OvershootAlwaysOff);
+		props.setScrollMetric(QScrollerProperties::DecelerationFactor,
+				      0.12);
+		props.setScrollMetric(QScrollerProperties::MaximumVelocity,
+				      0.7);
+		sc->setScrollerProperties(props);
+	}
+	auto *gridHost = new QWidget;
+	applyDarkStyle(gridHost);
+	auto *grid = new QGridLayout(gridHost);
 	grid->setHorizontalSpacing(10);
 	grid->setVerticalSpacing(8);
-	grid->setContentsMargins(0, 0, 0, 0);
+	grid->setContentsMargins(0, 0, 2, 0);
 	auto *apBtn = makeHomeCard(PixelGlyph::Light, QString::fromUtf8("光感"),
 				   &homeApSummary_, kCyan);
 	auto *icmBtn = makeHomeCard(PixelGlyph::Imu, QString::fromUtf8("六轴"),
@@ -288,19 +360,28 @@ QWidget *Dashboard::buildHomePage()
 				    &homeKeySummary_, kPurple);
 	auto *otaBtn = makeHomeCard(PixelGlyph::Ota, QString::fromUtf8("OTA"),
 				    &homeOtaSummary_, kGreen);
+	auto *foBtn = makeHomeCard(PixelGlyph::Failover,
+				   QString::fromUtf8("Failover"),
+				   &homeFailoverSummary_, kFailoverTone);
 	connect(apBtn, &QAbstractButton::clicked, this, &Dashboard::openAp);
 	connect(icmBtn, &QAbstractButton::clicked, this, &Dashboard::openIcm);
 	connect(sysBtn, &QAbstractButton::clicked, this, &Dashboard::openSys);
 	connect(ledBtn, &QAbstractButton::clicked, this, &Dashboard::openLeds);
 	connect(keyBtn, &QAbstractButton::clicked, this, &Dashboard::openKeys);
 	connect(otaBtn, &QAbstractButton::clicked, this, &Dashboard::openOta);
+	connect(foBtn, &QAbstractButton::clicked, this,
+		&Dashboard::openFailover);
 	grid->addWidget(apBtn, 0, 0);
 	grid->addWidget(icmBtn, 0, 1);
 	grid->addWidget(sysBtn, 1, 0);
 	grid->addWidget(ledBtn, 1, 1);
 	grid->addWidget(keyBtn, 2, 0);
 	grid->addWidget(otaBtn, 2, 1);
-	lay->addLayout(grid, 1);
+	grid->addWidget(foBtn, 3, 0);
+	/* 4×168 + 3×8 ≈ 696 > 可视区，强制出现纵向滚动 */
+	gridHost->setMinimumHeight(168 * 4 + 8 * 3);
+	scroll->setWidget(gridHost);
+	lay->addWidget(scroll, 1);
 	return page;
 }
 
@@ -488,6 +569,64 @@ QWidget *Dashboard::buildOtaPage()
 	lay->addWidget(otaProgressLabel_);
 	lay->addWidget(otaProgressBar_);
 	lay->addWidget(otaPullBtn_);
+	lay->addWidget(back);
+	return page;
+}
+
+QWidget *Dashboard::buildFailoverPage()
+{
+	auto *page = new QWidget;
+	applyDarkStyle(page);
+	auto *lay = new QVBoxLayout(page);
+	lay->setContentsMargins(16, 10, 16, 10);
+	lay->setSpacing(4);
+	auto *title = new QLabel(QString::fromUtf8("FAILOVER / LAB"));
+	title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+	title->setStyleSheet(titleStyle(kFailoverTone));
+	lay->addWidget(title);
+	failoverDetail_ = new QLabel;
+	failoverDetail_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+	failoverDetail_->setWordWrap(true);
+	failoverDetail_->setStyleSheet(monoStyle());
+	failoverArmBtn_ =
+		new QPushButton(QString::fromUtf8("[ ARM (准备测试) ]"));
+	failoverSoftBtn_ =
+		new QPushButton(QString::fromUtf8("[ SOFT (禁确认) ]"));
+	failoverSoftUndoBtn_ =
+		new QPushButton(QString::fromUtf8("[ SOFT-UNDO (恢复) ]"));
+	failoverArmBtn_->setStyleSheet(pixelActionStyle(kGreen));
+	failoverSoftBtn_->setStyleSheet(pixelActionStyle(kYellow));
+	failoverSoftUndoBtn_->setStyleSheet(pixelActionStyle(kFailoverTone));
+	for (QPushButton *b :
+	     {failoverArmBtn_, failoverSoftBtn_, failoverSoftUndoBtn_}) {
+		b->setMinimumHeight(42);
+		b->setMaximumHeight(46);
+		noFocus(b);
+	}
+	connect(failoverArmBtn_, &QPushButton::clicked, this,
+		&Dashboard::onFailoverArm);
+	connect(failoverSoftBtn_, &QPushButton::clicked, this,
+		&Dashboard::onFailoverSoft);
+	connect(failoverSoftUndoBtn_, &QPushButton::clicked, this,
+		&Dashboard::onFailoverSoftUndo);
+	failoverProc_ = new QProcess(this);
+	connect(failoverProc_,
+		QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+		this, &Dashboard::onFailoverCmdFinished);
+	auto *hint = new QLabel(QString::fromUtf8(
+		"仅安全操作；break 请用串口。测完务必 SOFT-UNDO。"));
+	hint->setWordWrap(true);
+	hint->setStyleSheet(QStringLiteral(
+		"%1 font-size: 12px; color: %2; background: transparent;")
+				    .arg(terminalFont(),
+					 QLatin1String(kMuted)));
+	auto *back = makeBackBtn(kFailoverTone);
+	connect(back, &QPushButton::clicked, this, &Dashboard::backHome);
+	lay->addWidget(failoverDetail_, 1);
+	lay->addWidget(hint);
+	lay->addWidget(failoverArmBtn_);
+	lay->addWidget(failoverSoftBtn_);
+	lay->addWidget(failoverSoftUndoBtn_);
 	lay->addWidget(back);
 	return page;
 }
@@ -691,6 +830,148 @@ void Dashboard::refreshOtaLabels()
 	otaDetail_->setText(body);
 }
 
+void Dashboard::refreshFailoverLabels()
+{
+	const QString slot = fwPrintenvQuick("active_slot");
+	const QString bootcount = fwPrintenvQuick("bootcount");
+	if (homeFailoverSummary_ != nullptr) {
+		if (slot.isEmpty() && bootcount.isEmpty())
+			homeFailoverSummary_->setText(QString::fromUtf8("N/A"));
+		else
+			homeFailoverSummary_->setText(
+				QString::fromUtf8("%1 bc=%2")
+					.arg(fmtUnavailable(slot),
+					     fmtUnavailable(bootcount)));
+	}
+
+	/* 详情仅在 Failover 页拉完整 status，避免主页每秒阻塞 */
+	if (failoverDetail_ == nullptr || stack_ == nullptr ||
+	    stack_->currentIndex() != PageFailover)
+		return;
+	if (failoverProc_ != nullptr &&
+	    failoverProc_->state() != QProcess::NotRunning)
+		return;
+
+	QProcess proc;
+	proc.start(QStringLiteral("/usr/sbin/ota-failover-test"),
+		   {QStringLiteral("status")});
+	if (!proc.waitForStarted(2000) || !proc.waitForFinished(4000)) {
+		failoverDetail_->setText(QString::fromUtf8(
+			"无法执行 ota-failover-test status"));
+		return;
+	}
+	const QString out =
+		QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+	const QString err =
+		QString::fromUtf8(proc.readAllStandardError()).trimmed();
+	QString body = out;
+	if (body.isEmpty())
+		body = err.isEmpty() ? QString::fromUtf8("(无输出)") : err;
+	if (!failoverMsg_.isEmpty())
+		body += QString::fromUtf8("\n\nSTATUS..%1").arg(failoverMsg_);
+	failoverDetail_->setText(body);
+}
+
+void Dashboard::setFailoverButtonsEnabled(bool enabled)
+{
+	if (failoverArmBtn_ != nullptr)
+		failoverArmBtn_->setEnabled(enabled);
+	if (failoverSoftBtn_ != nullptr)
+		failoverSoftBtn_->setEnabled(enabled);
+	if (failoverSoftUndoBtn_ != nullptr)
+		failoverSoftUndoBtn_->setEnabled(enabled);
+}
+
+void Dashboard::runFailoverCmd(const QStringList &args, const QString &busyMsg)
+{
+	if (failoverProc_ != nullptr &&
+	    failoverProc_->state() != QProcess::NotRunning) {
+		failoverMsg_ = QString::fromUtf8("命令进行中，请稍候…");
+		refreshFailoverLabels();
+		return;
+	}
+	failoverMsg_ = busyMsg;
+	setFailoverButtonsEnabled(false);
+	refreshFailoverLabels();
+	failoverProc_->start(QStringLiteral("/usr/sbin/ota-failover-test"),
+			     args);
+	if (!failoverProc_->waitForStarted(3000)) {
+		failoverMsg_ =
+			QString::fromUtf8("FAIL: cannot start ota-failover-test");
+		setFailoverButtonsEnabled(true);
+		refreshFailoverLabels();
+	}
+}
+
+void Dashboard::onFailoverArm()
+{
+	const auto reply = QMessageBox::question(
+		this, QString::fromUtf8("CONFIRM ARM"),
+		QString::fromUtf8(
+			"Clear failover_done / bootcount,\n"
+			"set upgrade_available=1.\n"
+			"Continue?"),
+		QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+	if (reply != QMessageBox::Yes)
+		return;
+	runFailoverCmd({QStringLiteral("arm"), QStringLiteral("--yes")},
+		       QString::fromUtf8("ARM…"));
+}
+
+void Dashboard::onFailoverSoft()
+{
+	const auto reply = QMessageBox::question(
+		this, QString::fromUtf8("CONFIRM SOFT"),
+		QString::fromUtf8(
+			"Disable board-boot-confirm (no init break).\n"
+			"Reboot -f later to raise bootcount.\n"
+			"Remember SOFT-UNDO after test.\n"
+			"Continue?"),
+		QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+	if (reply != QMessageBox::Yes)
+		return;
+	runFailoverCmd({QStringLiteral("soft"), QStringLiteral("--yes")},
+		       QString::fromUtf8("SOFT…"));
+}
+
+void Dashboard::onFailoverSoftUndo()
+{
+	const auto reply = QMessageBox::question(
+		this, QString::fromUtf8("CONFIRM SOFT-UNDO"),
+		QString::fromUtf8(
+			"Restore and start board-boot-confirm.\n"
+			"Continue?"),
+		QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+	if (reply != QMessageBox::Yes)
+		return;
+	runFailoverCmd({QStringLiteral("soft-undo"), QStringLiteral("--yes")},
+		       QString::fromUtf8("SOFT-UNDO…"));
+}
+
+void Dashboard::onFailoverCmdFinished(int exitCode, QProcess::ExitStatus status)
+{
+	const QString out =
+		QString::fromUtf8(failoverProc_->readAllStandardOutput())
+			.trimmed();
+	const QString err =
+		QString::fromUtf8(failoverProc_->readAllStandardError())
+			.trimmed();
+	setFailoverButtonsEnabled(true);
+	if (status != QProcess::NormalExit || exitCode != 0) {
+		failoverMsg_ = QString::fromUtf8("FAIL code=%1\n%2\n%3")
+				       .arg(exitCode)
+				       .arg(out)
+				       .arg(err);
+	} else {
+		failoverMsg_ = out.isEmpty()
+				       ? QString::fromUtf8("OK")
+				       : out;
+		if (!err.isEmpty())
+			failoverMsg_ += QLatin1Char('\n') + err;
+	}
+	refreshFailoverLabels();
+}
+
 void Dashboard::onOtaPullLatest()
 {
 	if (otaPullProc_ != nullptr &&
@@ -773,16 +1054,35 @@ void Dashboard::onOtaPullFinished(int exitCode, QProcess::ExitStatus status)
 	refreshOtaLabels();
 }
 
-void Dashboard::onHomeTick()
+void Dashboard::onClockTick()
 {
-	if (homeHudClock_)
+	if (homeHudClock_ != nullptr)
 		homeHudClock_->setText(
 			QTime::currentTime().toString(QStringLiteral("HH:mm:ss")));
+}
+
+bool Dashboard::homeScrollBusy() const
+{
+	if (homeScroll_ == nullptr)
+		return false;
+	QScroller *sc = QScroller::scroller(homeScroll_->viewport());
+	if (sc == nullptr)
+		return false;
+	const QScroller::State st = sc->state();
+	return st == QScroller::Dragging || st == QScroller::Scrolling;
+}
+
+void Dashboard::onHomeTick()
+{
+	/* 滑动中跳过传感器/fw 刷新，避免阻塞事件循环导致掉帧 */
+	if (homeScrollBusy())
+		return;
 	refreshApLabels();
 	refreshIcmLabels();
 	refreshSysLabels();
 	refreshLedLabels();
 	refreshOtaLabels();
+	refreshFailoverLabels();
 	if (keys_ && keys_->isOpen())
 		homeKeySummary_->setText(keys_->pressed()
 						 ? QString::fromUtf8("DOWN")
@@ -808,6 +1108,7 @@ void Dashboard::onDetailTick()
 		refreshOtaLabels();
 		break;
 	default:
+		/* Failover 详情在打开/命令结束后刷新，避免每 500ms 跑 shell */
 		break;
 	}
 }
@@ -849,6 +1150,12 @@ void Dashboard::openOta()
 {
 	stack_->setCurrentIndex(PageOta);
 	refreshOtaLabels();
+}
+
+void Dashboard::openFailover()
+{
+	stack_->setCurrentIndex(PageFailover);
+	refreshFailoverLabels();
 }
 
 void Dashboard::backHome()
@@ -912,9 +1219,12 @@ void Dashboard::onKeyPressed(bool pressed)
 void Dashboard::setPageTimers(int pageIndex)
 {
 	homeTimer_->stop();
+	clockTimer_->stop();
 	detailTimer_->stop();
-	if (pageIndex == PageHome)
+	if (pageIndex == PageHome) {
 		homeTimer_->start();
-	else if (pageIndex != PageKeys)
+		clockTimer_->start();
+	} else if (pageIndex != PageKeys && pageIndex != PageFailover) {
 		detailTimer_->start();
+	}
 }
